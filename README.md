@@ -69,17 +69,19 @@ radio/
 
 ## 快速开始
 
+> **注意**：当前仓库仅包含分工5（AI + 外部 API）的 service 层代码。`package.json`、`tsconfig.json`、路由层、前端由其他分工成员提供。
+
 ```bash
 # 1. 克隆仓库
 git clone <repo-url> radio
 cd radio
 
-# 2. 安装依赖
+# 2. 待分工2 完成项目骨架后，安装依赖
 pnpm install
 
 # 3. 配置环境变量
 cp apps/server/.env.example apps/server/.env
-# 编辑 .env，填入 API Key
+# 编辑 .env，填入实际 API Key
 
 # 4. 启动
 pnpm dev

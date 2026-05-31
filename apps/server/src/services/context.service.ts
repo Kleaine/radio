@@ -3,11 +3,12 @@
 
 import type { WeatherService, WeatherData } from "./weather.service";
 import type { CalendarService, CalendarEvent } from "./calendar.service";
-import { readAllProfiles } from "./memory-writer";
+import type { MemoryWriter } from "./memory-writer";
 
 export interface ContextConfig {
   weatherService: WeatherService;
   calendarService: CalendarService;
+  memoryWriter: MemoryWriter;
   /** 最近播放记录，由后端 DB 提供 */
   recentPlays?: string[];
   /** 最近跳过的歌 */
@@ -19,7 +20,7 @@ export interface ContextService {
 }
 
 export function createContextService(config: ContextConfig): ContextService {
-  const { weatherService, calendarService } = config;
+  const { weatherService, calendarService, memoryWriter } = config;
 
   async function getWeatherText(): Promise<string> {
     try {
@@ -47,7 +48,7 @@ export function createContextService(config: ContextConfig): ContextService {
 
   async function getProfileText(): Promise<string> {
     try {
-      const profiles = readAllProfiles();
+      const profiles = memoryWriter.readAll();
       const parts: string[] = [];
       if (profiles.taste?.trim()) {
         parts.push(`用户音乐偏好：${profiles.taste.trim().replace(/\n- /g, "、").replace(/^- /, "")}`);
