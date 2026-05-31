@@ -37,17 +37,17 @@
 │              │   ├─ 天气 → weatherService.getCurrent()             │
 │              │   ├─ 日程 → calendarService.getTodayEvents()        │
 │              │   ├─ 历史 → DB 查最近播放                           │
-│              │   └─ 画像 → readAllProfiles()                      │
+│              │   └─ 画像 → memoryWriter.readAll()                  │
 │              │                                                   │
-│              ├─ llmService.chat(message, context, onChunk)         │
-│              │   ├─ 流式输出文本 → SSE push "chunk" 给前端          │
-│              │   └─ 解析 JSON → 返回 ChatReply                    │
+│              ├─ llmService.chatStream(message, context, onChunk)     │
+│              │   ├─ 流式输出文本 → SSE push "chunk" 给前端            │
+│              │   └─ 解析 JSON → 返回 ChatReply                      │
 │              │                                                   │
 │              ├─ 遍历 ChatReply.songs[]                             │
 │              │   └─ musicService.search("歌名 歌手") → 补全真实id   │
 │              │                                                   │
 │              ├─ 如果有 ChatReply.memory[]                          │
-│              │   └─ writeMemories(memory) → 写入 user/taste.md     │
+│              │   └─ memoryWriter.writeAll(memory) → 写入 user/taste.md │
 │              │                                                   │
 │              ├─ 如果有 ChatReply.schedule[]                        │
 │              │   └─ calendarService.updateEvents(schedule)         │

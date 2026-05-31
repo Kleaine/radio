@@ -55,7 +55,7 @@ morning | coding | relax | workout | sleep | focus | party | commute | rainy | d
 
 ### schedule（可选）
 - 如果用户在聊天中提到了日程信息，提取出来
-- 格式：`[{"time": "HH:MM", "title": "事项"}]`
+- 格式：`[{"start": "HH:MM", "end": "HH:MM", "title": "事项"}]`（无结束时间则 end 留空）
 - 没有则返回空数组 `[]`
 
 ### memory（可选）

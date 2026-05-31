@@ -4,8 +4,6 @@
 import fs from "fs";
 import path from "path";
 
-const SCHEDULE_PATH = path.resolve(process.cwd(), "data", "schedule.txt");
-
 export interface CalendarEvent {
   start: string;  // "HH:MM"
   end: string;    // "HH:MM"，全天事件则为空
@@ -50,23 +48,25 @@ function formatEvents(events: CalendarEvent[]): string {
     .join("\n") + "\n";
 }
 
-const calendarService: CalendarService = {
-  async getTodayEvents(): Promise<CalendarEvent[]> {
-    try {
-      const text = fs.readFileSync(SCHEDULE_PATH, "utf-8");
-      return parseSchedule(text);
-    } catch {
-      return [];
-    }
-  },
+export function createCalendarService(dataDir?: string): CalendarService {
+  const schedulePath = path.resolve(dataDir ?? process.cwd(), "data", "schedule.txt");
 
-  async updateEvents(events: CalendarEvent[]): Promise<void> {
-    const dir = path.dirname(SCHEDULE_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(SCHEDULE_PATH, formatEvents(events), "utf-8");
-  },
-};
+  return {
+    async getTodayEvents(): Promise<CalendarEvent[]> {
+      try {
+        const text = fs.readFileSync(schedulePath, "utf-8");
+        return parseSchedule(text);
+      } catch {
+        return [];
+      }
+    },
 
-export default calendarService;
+    async updateEvents(events: CalendarEvent[]): Promise<void> {
+      const dir = path.dirname(schedulePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(schedulePath, formatEvents(events), "utf-8");
+    },
+  };
+}

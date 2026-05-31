@@ -57,7 +57,7 @@ async function fetchWttrIn(city: string): Promise<WeatherData | null> {
     const data = await res.json() as any;
     const current = data?.current_condition?.[0];
     return {
-      temp: Math.round(Number(current?.temp_C) ?? 0),
+      temp: current?.temp_C ? Math.round(Number(current.temp_C)) : 0,
       description: current?.lang_zh?.[0]?.value ?? current?.weatherDesc?.[0]?.value ?? "未知",
       city,
     };
@@ -68,11 +68,10 @@ async function fetchWttrIn(city: string): Promise<WeatherData | null> {
 
 // ── 对外接口 ──
 
-let cachedWeather: WeatherData | null = null;
-
 export function createWeatherService(config?: { openWeatherApiKey?: string; city?: string }): WeatherService {
   const apiKey = config?.openWeatherApiKey ?? "";
   const city = config?.city ?? "Beijing";
+  let cachedWeather: WeatherData | null = null;
 
   return {
     async getCurrent(): Promise<WeatherData> {
