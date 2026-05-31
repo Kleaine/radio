@@ -24,7 +24,10 @@ export interface MemoryWriter {
 export function createMemoryWriter(userDir?: string): MemoryWriter {
   const dir = path.resolve(userDir ?? process.cwd(), "user");
 
+  let initialized = false;
+
   function ensureDir() {
+    if (initialized) return;
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -34,6 +37,7 @@ export function createMemoryWriter(userDir?: string): MemoryWriter {
         fs.writeFileSync(filePath, "", "utf-8");
       }
     }
+    initialized = true;
   }
 
   function write(entry: MemoryEntry) {
