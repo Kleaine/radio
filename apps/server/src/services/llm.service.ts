@@ -1,27 +1,54 @@
 // llm.service.ts — LLM 调用封装（豆包 / 火山引擎）
-// 功能：流式聊天 + System Prompt 注入 + JSON 提取 + 容错降级
+// 功能：流式播报计划 + 流式聊天 + JSON 提取 + 容错降级
 
 import fs from "fs";
 import path from "path";
 import OpenAI from "openai";
 import type { MemoryEntry } from "./memory-writer";
 
-// ── 类型定义 ──
+// ── 播报计划类型 ──
+
+/** 播报计划中的一项：歌曲 或 DJ 说话 */
+export interface PlayableItem {
+  type: "song" | "tts";
+  // song 字段
+  title?: string;
+  artist?: string;
+  query?: string;     // 搜索关键词，enrich 阶段用
+  songId?: string;    // enrich 后补全
+  coverUrl?: string;  // enrich 后补全
+  audioUrl?: string;  // enrich 后补全
+  reason?: string;    // AI 选这首歌的理由
+  // tts 字段
+  text?: string;      // DJ 说话文本，分工4 合成语音
+}
+
+/** 播报计划：AI DJ 生成的完整电台节目序列 */
+export interface PlanResponse {
+  summary: string;
+  scene: string;
+  items: PlayableItem[];   // 顺序序列：先说开场白 → 歌 → DJ说话 → 歌 → ...
+  memory?: MemoryEntry[];
+  schedule?: ScheduleEntry[];
+}
+
+// ── 聊天类型 ──
 
 export interface ChatSong {
   title: string;
   artist: string;
   reason: string;
-  id?: string;      // QQ音乐歌曲ID（由 enrich 阶段补全）
-  cover?: string;   // 封面图URL（由 enrich 阶段补全）
+  id?: string;
+  cover?: string;
 }
 
 export interface ScheduleEntry {
-  start: string;   // "HH:MM"
-  end: string;     // "HH:MM"，全天事件留空
+  start: string;
+  end: string;
   title: string;
 }
 
+/** 聊天回复：自然语言对话场景使用 */
 export interface ChatReply {
   say: string;
   scene: string;
@@ -31,25 +58,40 @@ export interface ChatReply {
   memory: MemoryEntry[];
 }
 
+// ── 配置与接口 ──
+
 export interface LlmConfig {
   apiKey: string;
   baseURL?: string;
   model?: string;
-  /** plan-system.md 的路径 */
   systemPromptPath?: string;
-  /** LLM 调用超时（毫秒），默认 60000 */
   timeoutMs?: number;
 }
 
 export interface LlmService {
-  /** 流式聊天。每收到一段文本就回调 onChunk。返回完整 ChatReply。 */
+  /** 流式生成播报计划。每收到一段文本就回调 onChunk，返回完整 PlanResponse。 */
+  generatePlanStream(
+    trigger: "manual" | "auto" | "scheduled",
+    input: string,
+    context: string,
+    onChunk: (text: string) => void
+  ): Promise<PlanResponse>;
+
+  /** 非流式生成播报计划。用于后台调度。 */
+  generatePlan(
+    trigger: "manual" | "auto" | "scheduled",
+    input: string,
+    context: string
+  ): Promise<PlanResponse>;
+
+  /** 流式聊天。返回 ChatReply。 */
   chatStream(
     userMessage: string,
     context: string,
     onChunk: (text: string) => void
   ): Promise<ChatReply>;
 
-  /** 非流式聊天。用于后台调度等无需实时推送的场景。 */
+  /** 非流式聊天。 */
   chat(userMessage: string, context: string): Promise<ChatReply>;
 }
 
@@ -95,6 +137,54 @@ function fallbackReply(_userMessage: string): ChatReply {
     segue: "",
     schedule: [],
     memory: [],
+  };
+}
+
+// ── 解析 LLM 回复为 PlanResponse ──
+
+function parsePlan(json: Record<string, any>): PlanResponse {
+  const items: PlayableItem[] = (json.items ?? []).map((item: any) => {
+    if (item.type === "tts") {
+      return { type: "tts", text: item.text ?? "" };
+    }
+    return {
+      type: "song",
+      title: item.title ?? "",
+      artist: item.artist ?? "",
+      query: item.query ?? `${item.title ?? ""} ${item.artist ?? ""}`.trim(),
+      reason: item.reason ?? "",
+      coverUrl: item.coverUrl ?? undefined,
+      audioUrl: item.audioUrl ?? undefined,
+    };
+  });
+
+  const schedule: ScheduleEntry[] = (json.schedule ?? []).map((s: any) => ({
+    start: s.start ?? s.time ?? "",
+    end: s.end ?? "",
+    title: s.title ?? "",
+  }));
+
+  return {
+    summary: json.summary ?? "今日播报计划",
+    scene: json.scene ?? "default",
+    items,
+    memory: json.memory ?? [],
+    schedule,
+  };
+}
+
+function fallbackPlan(): PlanResponse {
+  return {
+    summary: "默认播报计划",
+    scene: "default",
+    items: [
+      { type: "tts", text: "欢迎收听 AI 电台，接下来为你准备了几首好听的歌。" },
+      { type: "song", query: "周杰伦 晴天", reason: "经典好歌" },
+      { type: "tts", text: "希望你喜欢～下一首更精彩" },
+      { type: "song", query: "陈奕迅 好久不见", reason: "温暖男声" },
+    ],
+    memory: [],
+    schedule: [],
   };
 }
 
@@ -223,6 +313,63 @@ export function createLlmService(config: LlmConfig): LlmService {
   const msg = (userMessage: string, context: string) =>
     context ? `${context}\n\n用户说：${userMessage}` : userMessage;
 
+  async function generatePlanStream(
+    trigger: "manual" | "auto" | "scheduled",
+    input: string,
+    context: string,
+    onChunk: (text: string) => void
+  ): Promise<PlanResponse> {
+    const prefix = trigger === "scheduled"
+      ? "请根据当前时间和场景自动生成一段电台播报计划。"
+      : "";
+    const fullMessage = context
+      ? `${context}\n\n${prefix}用户说：${input}`
+      : `${prefix}${input}`;
+
+    try {
+      const fullText = await callDoubaoStream(
+        client, model, systemPrompt, fullMessage, timeoutMs, onChunk
+      );
+
+      const json = extractJson(fullText);
+      if (json) return parsePlan(json);
+
+      console.warn("[llm] 播报计划 JSON 提取失败");
+      return fallbackPlan();
+    } catch (e: any) {
+      console.error("[llm] 播报计划流式生成失败:", e.message);
+      return fallbackPlan();
+    }
+  }
+
+  async function generatePlan(
+    trigger: "manual" | "auto" | "scheduled",
+    input: string,
+    context: string
+  ): Promise<PlanResponse> {
+    const prefix = trigger === "scheduled"
+      ? "请根据当前时间和场景自动生成一段电台播报计划。"
+      : "";
+    const fullMessage = context
+      ? `${context}\n\n${prefix}用户说：${input}`
+      : `${prefix}${input}`;
+
+    try {
+      const fullText = await callDoubao(
+        client, model, systemPrompt, fullMessage, timeoutMs
+      );
+
+      const json = extractJson(fullText);
+      if (json) return parsePlan(json);
+
+      console.warn("[llm] 播报计划 JSON 提取失败");
+      return fallbackPlan();
+    } catch (e: any) {
+      console.error("[llm] 播报计划生成失败:", e.message);
+      return fallbackPlan();
+    }
+  }
+
   async function chatStream(
     userMessage: string,
     context: string,
@@ -268,5 +415,5 @@ export function createLlmService(config: LlmConfig): LlmService {
     }
   }
 
-  return { chatStream, chat };
+  return { generatePlanStream, generatePlan, chatStream, chat };
 }
