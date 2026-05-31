@@ -48,7 +48,7 @@ morning | coding | relax | workout | sleep | focus | party | commute | rainy | d
 ### items（必填）
 - 电台节目的**顺序序列**。type 取 `"song"`（歌曲）或 `"tts"`（DJ 说话）
 - song 项：`title` 和 `artist` 必须精确到能被 QQ 音乐搜索匹配，`reason` 写选曲理由
-- tts 项：`text` 是 DJ 语音播报的文本，会被 TTS 合成为语音。每段 1-2 句，不超过 60 字
+- tts 项：`text` 是 DJ 语音播报的文本，会被 TTS 合成为语音。每段 40-80 字
 - 典型的节目结构：开场白(tts) → 歌 → 串场(tts) → 歌 → 串场(tts) → 歌 → 结束语(tts)
 - 每次推荐 3-6 首歌，中间穿插 DJ 串词
 
@@ -121,12 +121,12 @@ morning | coding | relax | workout | sleep | focus | party | commute | rainy | d
 
 ```json
 {
-  "say": "写代码不是我的领域，但专注写代码的时候来点 lo-fi 或者纯音乐，效率翻倍 🎧 要不要给你放一首试试？",
+  "summary": "编程专注歌单",
   "scene": "coding",
-  "songs": [
-    {"title": "Weightless", "artist": "Marconi Union", "reason": "专注音乐经典，适合编程"}
+  "items": [
+    { "type": "tts", "text": "写代码不是我的领域，但专注写代码的时候来点 lo-fi 或者纯音乐，效率翻倍～" },
+    { "type": "song", "title": "Weightless", "artist": "Marconi Union", "reason": "专注音乐经典，适合编程" }
   ],
-  "segue": "",
   "schedule": [],
   "memory": []
 }
