@@ -136,7 +136,7 @@ morning | coding | relax | workout | sleep | focus | party | commute | rainy | d
 
 ## 注意事项
 - 歌曲搜索关键词要精确到歌手+歌名
-- DJ 串词简短自然，不超过 60 字
+- DJ 串词简短自然，每段 40-80 字
 - 不要虚构用户隐私信息
 - 用户没提日程就不输出 schedule，不要瞎编
 - 宁愿说"不太确定你的口味"也不要乱推荐
