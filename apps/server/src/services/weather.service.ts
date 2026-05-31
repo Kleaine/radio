@@ -72,14 +72,22 @@ export function createWeatherService(config?: { openWeatherApiKey?: string; city
   const apiKey = config?.openWeatherApiKey ?? "";
   const city = config?.city ?? "Beijing";
   let cachedWeather: WeatherData | null = null;
+  let lastFetchTime = 0;
+  const CACHE_TTL = 5 * 60 * 1000; // 5 分钟缓存
 
   return {
     async getCurrent(): Promise<WeatherData> {
+      // 缓存未过期，直接返回
+      if (cachedWeather && Date.now() - lastFetchTime < CACHE_TTL) {
+        return cachedWeather;
+      }
+
       // 第 1 层：OpenWeatherMap（需 API Key）
       if (apiKey) {
         const result = await fetchOpenWeather(apiKey, city);
         if (result) {
           cachedWeather = result;
+          lastFetchTime = Date.now();
           return result;
         }
       }
@@ -88,6 +96,7 @@ export function createWeatherService(config?: { openWeatherApiKey?: string; city
       const wttrResult = await fetchWttrIn(city);
       if (wttrResult) {
         cachedWeather = wttrResult;
+        lastFetchTime = Date.now();
         return wttrResult;
       }
 
