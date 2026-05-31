@@ -52,7 +52,7 @@
 │              ├─ 如果有 PlanResponse.schedule[]                      │
 │              │   └─ calendarService.updateEvents(schedule)         │
 │              │                                                   │
-│              └─ SSE push "done" → { say, songs[], scene } 给前端   │
+│              └─ SSE push "done" → PlanResponse JSON 给前端          │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
         │
