@@ -39,17 +39,17 @@
 │              │   ├─ 历史 → DB 查最近播放                           │
 │              │   └─ 画像 → memoryWriter.readAll()                  │
 │              │                                                   │
-│              ├─ llmService.chatStream(message, context, onChunk)     │
+│              ├─ llmService.generatePlanStream("manual", message, context, onChunk) │
 │              │   ├─ 流式输出文本 → SSE push "chunk" 给前端            │
-│              │   └─ 解析 JSON → 返回 ChatReply                      │
+│              │   └─ 解析 JSON → 返回 PlanResponse                    │
 │              │                                                   │
-│              ├─ 遍历 ChatReply.songs[]                             │
-│              │   └─ musicService.search("歌名 歌手") → 补全真实id   │
+│              ├─ plan-enrich.enrichItems(plan.items, config)          │
+│              │   └─ song 项 → musicService.search() 补全真实id/URL   │
 │              │                                                   │
-│              ├─ 如果有 ChatReply.memory[]                          │
+│              ├─ 如果有 PlanResponse.memory[]                        │
 │              │   └─ memoryWriter.writeAll(memory) → 写入 user/taste.md │
 │              │                                                   │
-│              ├─ 如果有 ChatReply.schedule[]                        │
+│              ├─ 如果有 PlanResponse.schedule[]                      │
 │              │   └─ calendarService.updateEvents(schedule)         │
 │              │                                                   │
 │              └─ SSE push "done" → { say, songs[], scene } 给前端   │
@@ -98,7 +98,7 @@ event: chunk
 data: 给你找几首放松的～
 
 event: done
-data: {"say":"好的～今天确实有点累了，给你找几首放松的～","scene":"relax","songs":[{"title":"旅行的意义","artist":"陈绮贞","reason":"清新治愈"}],"segue":"","schedule":[],"memory":[]}
+data: {"summary":"疲劳放松播报","scene":"relax","items":[{"type":"tts","text":"累了的时候，不需要太用力的音乐。"},{"type":"song","title":"旅行的意义","artist":"陈绮贞","reason":"清新治愈"}],"schedule":[],"memory":[]}
 ```
 
 ---
@@ -109,7 +109,7 @@ data: {"say":"好的～今天确实有点累了，给你找几首放松的～","
 |---|---|
 | **分工5** | 提供 `llm.service.ts`、`context.service.ts`、`music.service.ts`、`weather.service.ts`、`calendar.service.ts`、`memory-writer.ts`。每个都带 Mock 实现。 |
 | **分工2** | 在 `/api/dispatch` 路由中调用分工5 的服务，处理 SSE 推送、正则分发。需要实现 DB 层（plays 表，给 context 提供"最近播放"数据）。 |
-| **分工1** | 前端调用 `/api/dispatch`，接收 SSE 事件，渲染聊天区和歌曲卡片。AI 回复的 JSON 字段名：`say`、`songs[].title`、`songs[].artist`、`songs[].reason`、`scene`。 |
+| **分工1** | 前端调用 `/api/dispatch`，接收 SSE 事件，渲染聊天区和歌曲卡片。AI 回复的 JSON 字段名：`summary`、`scene`、`items[].type`（song/tts）、`items[].title`、`items[].artist`、`items[].reason`、`items[].text`。 |
 
 ---
 
