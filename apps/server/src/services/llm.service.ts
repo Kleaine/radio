@@ -233,9 +233,6 @@ export function createLlmService(config: LlmConfig): LlmService {
   const client = new OpenAI({ apiKey, baseURL, timeout: timeoutMs });
   const systemPrompt = loadSystemPrompt(systemPromptPath);
 
-  const msg = (userMessage: string, context: string) =>
-    context ? `${context}\n\n用户说：${userMessage}` : userMessage;
-
   async function generatePlanStream(
     trigger: "manual" | "auto" | "scheduled",
     input: string,
