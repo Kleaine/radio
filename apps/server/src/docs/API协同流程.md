@@ -65,7 +65,7 @@
 │  │              │  │              │  │              │            │
 │  │ llm.service  │  │ music.service │  │ weather.svc  │            │
 │  │ · 流式聊天    │  │ · search()   │  │ · 3层回退    │            │
-│  │ · JSON 提取   │  │ · getUrl()   │  │ · 缓存       │            │
+│  │ · JSON 提取   │  │ · getSongUrl()   │  │ · 缓存       │            │
 │  │ · 降级        │  │ · getLyric() │  │              │            │
 │  └──────────────┘  └──────────────┘  └──────────────┘            │
 │                                                                  │
