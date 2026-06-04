@@ -19,8 +19,8 @@ export interface EnrichedItem {
 
 export interface EnrichConfig {
   musicService: MusicService;
-  /** 分工4 提供的 TTS 服务，暂未对接时可留空 */
-  ttsService?: { synthesize: (text: string) => Promise<string> };
+  /** 分工4 提供的 TTS 服务：输入 DJ 文本和音色，返回音频 URL */
+  ttsService?: { synthesize: (text: string, voice?: string) => Promise<string> };
 }
 
 /** 把播报计划的 items 逐条增强为可播放项 */
@@ -36,7 +36,7 @@ export async function enrichItems(
       let ttsAudioUrl = "";
       if (ttsService && item.text) {
         try {
-          ttsAudioUrl = await ttsService.synthesize(item.text);
+          ttsAudioUrl = await ttsService.synthesize(item.text, item.voice);
         } catch (e: any) {
           console.error("[enrich] TTS 合成失败:", e.message);
         }
