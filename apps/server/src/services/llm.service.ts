@@ -20,6 +20,7 @@ export interface PlayableItem {
   reason?: string;    // AI 选这首歌的理由
   // tts 字段
   text?: string;      // DJ 说话文本，分工4 TTS 合成语音
+  voice?: string;     // 音色选择：gentle_female | lively_female | announcer_male
 }
 
 export interface ScheduleEntry {
@@ -96,7 +97,7 @@ function extractJson(text: string): Record<string, any> | null {
 function parsePlan(json: Record<string, any>): PlanResponse {
   const items: PlayableItem[] = (json.items ?? []).map((item: any) => {
     if (item.type === "tts") {
-      return { type: "tts", text: item.text ?? "" };
+      return { type: "tts", text: item.text ?? "", voice: item.voice ?? undefined };
     }
     return {
       type: "song",
