@@ -1,0 +1,657 @@
+/* ==========================================================================
+   AI DJ 智能语音助手系统 - 核心核心样式表 v3.0 (全功能完美整合版)
+   设计风格：科幻微拟物、暗黑赛博、毛玻璃流体美学
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. 全局初始化与控制变量
+   -------------------------------------------------------------------------- */
+:root {
+    --bg-main: #06060a;
+    --bg-card: #0f0f19;
+    --primary: #00f2fe;        /* 赛博极光蓝 */
+    --secondary: #4facfe;      /* 电子电音蓝 */
+    --accent: #ff416c;         /* 警示霓虹红 */
+    --text-main: #ffffff;
+    --text-muted: #8a8da4;
+    --glass-bg: rgba(255, 255, 255, 0.03);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --primary-glow: rgba(0, 242, 254, 0.3);
+    --font-base: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    font-family: var(--font-base);
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* 自定义极简流线滚动条 */
+::-webkit-scrollbar {
+    width: 5px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   2. 全屏独立鉴权层 (登录 / 注册卡片面板)
+   -------------------------------------------------------------------------- */
+.auth-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: radial-gradient(circle at center, #0e0f19 0%, var(--bg-main) 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.35s ease-in-out;
+}
+
+.auth-card {
+    background: rgba(15, 15, 25, 0.7);
+    border: 1px solid var(--glass-border);
+    padding: 40px;
+    border-radius: 24px;
+    width: 90%;
+    max-width: 420px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 242, 254, 0.05);
+    text-align: center;
+    backdrop-filter: blur(20px);
+    animation: cardEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cardEntrance {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.auth-logo {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+    text-shadow: 0 0 10px var(--primary-glow);
+}
+
+.auth-subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 30px;
+    line-height: 1.4;
+}
+
+.input-group {
+    margin-bottom: 16px;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 14px 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    color: #fff;
+    font-size: 0.95rem;
+    font-family: inherit;
+    transition: all 0.25s ease;
+}
+
+.input-group input:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 15px rgba(0, 242, 254, 0.15);
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.auth-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    border: none;
+    border-radius: 12px;
+    color: #000;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.25s;
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+}
+
+.auth-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+}
+
+.auth-btn.register {
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    box-shadow: none;
+}
+
+.auth-btn.register:hover {
+    background: rgba(0, 242, 254, 0.08);
+    color: #fff;
+}
+
+.auth-switch {
+    margin-top: 20px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.auth-switch a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+    margin-left: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   3. 主控制舱物理骨架
+   -------------------------------------------------------------------------- */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background: #06060a;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    background: rgba(6, 6, 10, 0.8);
+    border-bottom: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px);
+}
+
+.logo {
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff 0%, var(--text-muted) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.schedule-toggle-btn {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.schedule-toggle-btn:hover {
+    border-color: var(--primary);
+    background: rgba(0, 242, 254, 0.05);
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,255,255,0.02);
+    padding: 6px 12px;
+    border-radius: 30px;
+    border: 1px solid var(--glass-border);
+}
+
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.dot.online {
+    background-color: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+}
+
+.status-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   4. DJ 核心状态屏与全新三种声线组件
+   -------------------------------------------------------------------------- */
+.dj-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px 24px 24px;
+    background: linear-gradient(180deg, rgba(15,15,25,0.4) 0%, transparent 100%);
+    text-align: center;
+}
+
+.dj-avatar {
+    position: relative;
+    width: 84px;
+    height: 84px;
+    margin-bottom: 20px;
+}
+
+.avatar-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 2px solid var(--primary);
+    box-shadow: 0 0 20px var(--primary-glow);
+    animation: breathe 3s infinite ease-in-out;
+}
+
+.avatar-inner {
+    position: absolute;
+    top: 4px; left: 4px; right: 4px; bottom: 4px;
+    background: #0c0d14;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 1.2rem;
+    border: 1px solid var(--glass-border);
+}
+
+@keyframes breathe {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.06); opacity: 1; box-shadow: 0 0 30px rgba(0, 242, 254, 0.5); }
+}
+
+.dj-info h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.dj-info p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    max-width: 280px;
+    margin: 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 升级版：三种定制声线微拟物组件 */
+.voice-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 20px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px 8px;
+    border-radius: 30px;
+    border: 1px solid var(--glass-border);
+}
+
+.voice-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-right: 6px;
+    margin-left: 6px;
+}
+
+.voice-options {
+    display: flex;
+    gap: 4px;
+}
+
+.voice-tab {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.voice-tab:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.voice-tab.active {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+    color: #000;
+    font-weight: 600;
+    box-shadow: 0 2px 10px var(--primary-glow);
+}
+
+/* --------------------------------------------------------------------------
+   5. 智能多模态对话渲染区
+   -------------------------------------------------------------------------- */
+.chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 24px;
+    margin-bottom: 20px;
+}
+
+.chat-box {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.message {
+    display: flex;
+    width: 100%;
+    animation: msgFade 0.3s ease-out forwards;
+}
+
+@keyframes msgFade {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.message-content {
+    padding: 14px 18px;
+    border-radius: 18px;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    max-width: 85%;
+    word-break: break-all;
+}
+
+/* 用户气泡：靠右定位，高质感蓝色调 */
+.user-message {
+    justify-content: flex-end;
+}
+.user-message .message-content {
+    background: linear-gradient(135deg, rgba(0, 242, 254, 0.15) 0%, rgba(79, 172, 254, 0.15) 100%);
+    border: 1px solid rgba(0, 242, 254, 0.2);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+/* 系统/DJ气泡：靠左定位，暗色毛玻璃 */
+.system-message {
+    justify-content: flex-start;
+    flex-direction: column;
+    align-items: flex-start;
+}
+.system-message .message-content {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+    color: rgba(255, 255, 255, 0.9);
+    border-top-left-radius: 4px;
+}
+
+/* 智能推荐金曲流光卡片 */
+.recommendation-card {
+    margin-top: 10px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px dashed rgba(0, 242, 254, 0.3);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 0.85rem;
+    color: #fff;
+    width: 85%;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+/* --------------------------------------------------------------------------
+   6. 物理控制与音频动效采集区
+   -------------------------------------------------------------------------- */
+.controls-container {
+    background: linear-gradient(0deg, #06060a 60%, transparent 100%);
+    padding: 20px 24px 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    border-top: 1px solid rgba(255,255,255,0.02);
+}
+
+/* 音频采集流波形动画 */
+.audio-visualizer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 24px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.audio-visualizer.active {
+    opacity: 1;
+}
+
+.audio-visualizer span {
+    width: 3px;
+    height: 4px;
+    background-color: var(--primary);
+    border-radius: 3px;
+}
+
+.audio-visualizer.active span {
+    animation: bounce 0.8s infinite ease-in-out;
+}
+.audio-visualizer.active span:nth-child(1) { animation-delay: 0.1s; }
+.audio-visualizer.active span:nth-child(2) { animation-delay: 0.3s; }
+.audio-visualizer.active span:nth-child(3) { animation-delay: 0.6s; }
+.audio-visualizer.active span:nth-child(4) { animation-delay: 0.2s; }
+.audio-visualizer.active span:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+    0%, 100% { transform: scaleY(1); }
+    50% { transform: scaleY(5); background-color: var(--secondary); }
+}
+
+/* 拟物录音物理按键总成 */
+.record-btn-wrapper {
+    position: relative;
+    width: 68px;
+    height: 68px;
+}
+
+.record-btn {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #12131e;
+    border: 1px solid var(--glass-border);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: inset 0 2px 5px rgba(255,255,255,0.05), 0 10px 20px rgba(0,0,0,0.4);
+}
+
+.record-btn:hover {
+    transform: scale(1.04);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* 录音激活态（红霓虹危险反馈） */
+.record-btn.recording {
+    background: var(--accent);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 0 25px rgba(255, 65, 108, 0.6);
+    animation: dynamicPulse 1.5s infinite;
+}
+
+@keyframes dynamicPulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 65, 108, 0.5); }
+    70% { box-shadow: 0 0 0 15px rgba(255, 65, 108, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 65, 108, 0); }
+}
+
+.record-status {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+
+/* --------------------------------------------------------------------------
+   7. 侧边滑动推拉抽屉 (飞书今日同步看板)
+   -------------------------------------------------------------------------- */
+.schedule-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 380px;
+    height: 100vh;
+    background: rgba(10, 10, 16, 0.95);
+    border-left: 1px solid var(--glass-border);
+    z-index: 1000;
+    padding: 30px 24px;
+    backdrop-filter: blur(25px);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+    transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 展开抽屉控制锚点 */
+.schedule-panel.show {
+    right: 0;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.panel-header h3 {
+    font-size: 1.15rem;
+    color: #fff;
+    font-weight: 600;
+}
+
+.close-panel-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-panel-btn:hover {
+    color: var(--accent);
+}
+
+.schedule-list {
+    overflow-y: auto;
+    height: calc(100vh - 100px);
+}
+
+.schedule-loading {
+    padding: 40px 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* 智能卡片子元素 */
+.schedule-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--glass-border);
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    transition: all 0.25s ease;
+}
+
+.schedule-item.active {
+    border-color: var(--primary);
+    background: rgba(0, 242, 254, 0.02);
+    box-shadow: 0 4px 15px rgba(0, 242, 254, 0.05);
+}
+
+.schedule-time {
+    font-size: 0.8rem;
+    color: var(--primary);
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.schedule-content {
+    font-size: 0.9rem;
+    color: #fff;
+    line-height: 1.4;
+}
+
+/* 未绑定飞书引导区域 */
+.feishu-bind-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 50px 20px;
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px dashed rgba(0, 242, 254, 0.2);
+    border-radius: 16px;
+    margin-top: 20px;
+}
+
+.bind-icon {
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+    filter: drop-shadow(0 0 8px var(--primary-glow));
+}
+
+.feishu-bind-zone h4 {
+    font-size: 1.05rem;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.feishu-bind-zone p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
