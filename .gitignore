@@ -7,3 +7,6 @@ dist/
 .vscode/
 .idea/
 Thumbs.db
+*.db
+*.db-shm
+*.db-wal
