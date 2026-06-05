@@ -40,14 +40,66 @@ radio/
 | DJ 人设 | `prompts/plan-system.md` | "说质感不说标签" · 冷知识节制 · 专业电台人格 |
 | 接口定义 | `interface/music.service.interface.ts` | 音乐服务接口契约 |
 
-### 待完成
+### 各分工状态
 
-| 层 | 内容 |
-|---|---|
-| Frontend | React 播放器 + SSE 流式接收 + 歌曲卡片渲染 |
-| Routing | Fastify 路由 + 三层意图分发 + SQLite 数据库 |
-| ASR | 语音识别 |
-| TTS | GPT-SoVITS 本地语音合成，三种音色（温柔女声/活泼女声/男播音）— 已完成 |
+| 分工 | 状态 | 交付物 | 待完成 |
+|---|---|---|---|
+| 分工5 AI | 已完成 | 7 个 service 文件 + prompt + 接口 + 文档 | — |
+| 分工4 TTS | 已完成 | GPT-SoVITS 本地服务，三种音色 | 参考音频效果待联调验证；无 Mock 模式 |
+| 分工2 后端 | 开发中 | Fastify 路由 + DB + SSE | 见下方验收要求 |
+| 分工1 前端 | 待开发 | React 播放器 | 见下方 |
+| 分工3 ASR | 待开发 | 语音识别 | 接口未定义，需与分工2 协商注入点 |
+
+#### 分工2 要做什么
+
+- 项目骨架：`package.json`、`tsconfig.json`、Fastify 入口文件
+- `/api/dispatch` 路由：按 `意图规则表.md` 实现三层分发（正则指令 → 正则搜索 → LLM）
+- `/api/player/*` 路由：播放控制（播放/暂停/下一首/上一首/随机/循环）
+- SQLite 数据库：plays 表（记录播放历史，供给 context.service）
+- SSE 流推送：`chunk` 事件（逐字文本）+ `done` 事件（完整 PlanResponse JSON）
+- WAV→URL 适配层：调分工4 TTS → 存音频 → 生成前端可访问的 URL → 传给 `enrichItems`
+- `.env` 加载：读环境变量 → 传进各 service 工厂函数
+
+#### 分工2 自测要求
+
+推 PR 前用 curl 验证：
+
+**1. 服务能启动**
+```bash
+pnpm install && pnpm dev   # 不报错
+```
+
+**2. Mock 模式下 AI 链路能跑通**
+```bash
+curl -N -X POST http://localhost:8080/api/dispatch \
+  -H "Content-Type: application/json" \
+  -d '{"message":"好累想听点放松的"}'
+```
+返回的 SSE 流不中断，`done` 事件里 `items[]` 至少包含 tts 和 song 两种类型。
+
+**3. 搜索路径能走通**
+```bash
+curl -X POST http://localhost:8080/api/dispatch \
+  -H "Content-Type: application/json" \
+  -d '{"message":"搜索周杰伦"}'
+```
+返回搜索结果列表，不调 LLM。
+
+#### 分工1 要做什么
+
+- React + Vite + PWA 项目骨架
+- SSE 客户端：接收 `chunk` 事件逐字渲染 + `done` 事件解析 PlanResponse
+- 播放器组件：按 items[] 顺序播放（tts 语音 → 歌曲 → tts 语音 → 歌曲）
+- 歌曲卡片：封面 + 歌名 + 歌手 + AI 推荐理由
+- 聊天区：DJ 话术气泡
+- 指令输入框 + 语音按钮（预留分工3 ASR 入口）
+
+#### 分工4 TTS 可能需修改
+
+联调时如果遇到以下问题，参考 `apps/server/src/docs/TTS对接分析.md`：
+- 中文合成发音不自然 → 换中文参考音频
+- GPT-SoVITS 环境搭不起来 → 暂无 Mock 兜底，需要本机配好环境
+- 系统没装 ffmpeg → 安装 ffmpeg（后处理依赖）
 
 ---
 
