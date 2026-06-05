@@ -60,30 +60,11 @@ radio/
 - WAV→URL 适配层：调分工4 TTS → 存音频 → 生成前端可访问的 URL → 传给 `enrichItems`
 - `.env` 加载：读环境变量 → 传进各 service 工厂函数
 
-#### 分工2 自测要求
+#### 分工2 交付目标
 
-推 PR 前用 curl 验证：
-
-**1. 服务能启动**
-```bash
-pnpm install && pnpm dev   # 不报错
-```
-
-**2. Mock 模式下 AI 链路能跑通**
-```bash
-curl -N -X POST http://localhost:8080/api/dispatch \
-  -H "Content-Type: application/json" \
-  -d '{"message":"好累想听点放松的"}'
-```
-返回的 SSE 流不中断，`done` 事件里 `items[]` 至少包含 tts 和 song 两种类型。
-
-**3. 搜索路径能走通**
-```bash
-curl -X POST http://localhost:8080/api/dispatch \
-  -H "Content-Type: application/json" \
-  -d '{"message":"搜索周杰伦"}'
-```
-返回搜索结果列表，不调 LLM。
+- AI 对接：`/api/dispatch` 能调通 `llmService.generatePlanStream()`，SSE 正常推送
+- 搜索对接：`/api/dispatch` 第二层正则能调 `musicService.search()`
+- 指令对接：`/api/dispatch` 第一层正则能触发 player 控制
 
 #### 分工1 要做什么
 
