@@ -229,7 +229,7 @@ export function createLlmService(config: LlmConfig): LlmService {
   const model = config.model ?? "doubao-lite-128k";
   const timeoutMs = config.timeoutMs ?? 60000;
   const systemPromptPath = config.systemPromptPath
-    ?? path.resolve(process.cwd(), "apps/server/src/prompts", "plan-system.md");
+    ?? path.resolve(__dirname, "..", "prompts", "plan-system.md");
 
   const client = new OpenAI({ apiKey, baseURL, timeout: timeoutMs });
   const systemPrompt = loadSystemPrompt(systemPromptPath);
