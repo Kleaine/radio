@@ -18,7 +18,7 @@ radio/
 │       └── src/
 │           ├── services/   ← AI 大脑 + 外部 API（已完成）
 │           ├── prompts/    ← AI DJ 人设卡
-│           ├── docs/       ← 架构文档 + 节目示例 + 对接分析
+│           ├── docs/       ← 接口文档 + 架构说明 + 节目示例 + 对接分析（标注分工）
 │           └── interface/  ← 跨模块接口定义
 ├── data/                  ← 运行时数据
 └── user/                  ← 用户画像
@@ -121,7 +121,7 @@ npm run dev
 边界明确：只回答音乐相关问题。遇到无关话题，一句话软拉回音乐。
 
 完整人设卡：`apps/server/src/prompts/plan-system.md`
-节目示例：`apps/server/src/docs/节目示例.md`
+节目示例：`apps/server/docs/节目示例-分工5.md`
 
 ---
 
