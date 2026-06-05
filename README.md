@@ -13,6 +13,7 @@
 radio/
 ├── apps/
 │   ├── web/               ← 前端（React 播放器，待开发）
+│   ├── tts/               ← TTS 语音合成（GPT-SoVITS，已完成）
 │   └── server/            ← 后端
 │       └── src/
 │           ├── services/   ← AI 大脑 + 外部 API（已完成）
@@ -46,7 +47,7 @@ radio/
 | Frontend | React 播放器 + SSE 流式接收 + 歌曲卡片渲染 |
 | Routing | Fastify 路由 + 三层意图分发 + SQLite 数据库 |
 | ASR | 语音识别 |
-| TTS | DJ 语音合成 |
+| TTS | GPT-SoVITS 本地语音合成，三种音色（温柔女声/活泼女声/男播音）— 已完成 |
 
 ---
 
