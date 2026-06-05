@@ -1,0 +1,46 @@
+{
+  "voices": [
+    {
+      "id": "gentle_female",
+      "name": "温柔女生",
+      "description": "女声，语速略慢，适合早安电台和舒缓播报。",
+      "ref_audio_path": "assets/voices/gentle_female.wav",
+      "prompt_text": "Today is calm and comfortable, perfect for a gentle song.",
+      "prompt_lang": "en",
+      "speed_factor": 0.9,
+      "postprocess": {
+        "pitch_semitones": -2.0,
+        "tempo": 0.92,
+        "sample_rate": 32000
+      }
+    },
+    {
+      "id": "lively_female",
+      "name": "活泼女生",
+      "description": "女声，语速略快，适合轻快互动和推荐歌曲。",
+      "ref_audio_path": "assets/voices/lively_female.wav",
+      "prompt_text": "Are you ready? Let us start today's happy playlist right now.",
+      "prompt_lang": "en",
+      "speed_factor": 1.12,
+      "postprocess": {
+        "pitch_semitones": 2.5,
+        "tempo": 1.1,
+        "sample_rate": 32000
+      }
+    },
+    {
+      "id": "announcer_male",
+      "name": "播音腔男生",
+      "description": "男声，发音清晰，适合正式 DJ 播报。",
+      "ref_audio_path": "assets/voices/announcer_male.wav",
+      "prompt_text": "Welcome to the smart radio show. Here is today's recommendation.",
+      "prompt_lang": "en",
+      "speed_factor": 1.0,
+      "postprocess": {
+        "pitch_semitones": -1.0,
+        "tempo": 0.98,
+        "sample_rate": 32000
+      }
+    }
+  ]
+}
