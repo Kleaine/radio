@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI DJ 助手 - 智能协同</title>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#06060a">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style-v3.css">
+</head>
+<body>
+
+    <div id="auth-screen" class="auth-container">
+        <div class="auth-card" id="login-card">
+            <div class="auth-logo">🎧 AI DJ Assistant</div>
+            <p class="auth-subtitle">语音交互智能AI系统</p>
+            <form id="login-form">
+                <div class="input-group">
+                    <input type="text" id="login-username" placeholder="请输入系统账户名称" required autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="login-password" placeholder="请输入密码" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="auth-btn">安全登录</button>
+            </form>
+            <p class="auth-switch">没有系统账号？<a href="#" id="to-register-btn">立即注册</a></p>
+        </div>
+
+        <div class="auth-card" id="register-card" style="display: none;">
+            <div class="auth-logo">🎧 AI DJ Assistant</div>
+            <p class="auth-subtitle">创建新账户</p>
+            <form id="register-form">
+                <div class="input-group">
+                    <input type="text" id="register-username" placeholder="请设置新账户名称" required autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="register-password" placeholder="请设置登录密码" required autocomplete="new-password">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="register-confirm" placeholder="请再次输入密码以确认" required autocomplete="new-password">
+                </div>
+                <button type="submit" class="auth-btn register">注册</button>
+            </form>
+            <p class="auth-switch">已有系统账号？<a href="#" id="to-login-btn">返回登录</a></p>
+        </div>
+    </div>
+
+    <div id="main-app" class="app-container" style="display: none;">
+        <header class="header">
+            <div class="logo">🎧 AI DJ Assistant</div>
+            <div class="header-right">
+                <button id="schedule-toggle-btn" class="schedule-toggle-btn">📅 飞书日程看板</button>
+                <div class="status-indicator">
+                    <span class="dot online"></span>
+                    <span class="status-text">系统就绪</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="dj-display">
+            <div class="dj-avatar">
+                <div class="avatar-ring"></div>
+                <div class="avatar-inner">AI</div>
+            </div>
+            <div class="dj-info" id="dj-info">
+                <h2>等待为您服务...</h2>
+                <p>点击下方录音按钮开始对话</p>
+            </div>
+            <div class="voice-selector">
+                <span class="voice-label">合成声线：</span>
+                <div class="voice-options">
+                    <button class="voice-tab active" data-voice="gentle_female">温柔女声</button>
+                    <button class="voice-tab" data-voice="lively_female">活力女声</button>
+                    <button class="voice-tab" data-voice="announcer_male">播音男声</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="chat-container">
+            <div class="chat-box" id="chat-box">
+                <div class="message system-message">
+                    <div class="message-content">
+                        验证通过！语音交互智能AI系统已就绪
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="controls-container">
+            <div class="audio-visualizer" id="audio-visualizer">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="record-btn-wrapper">
+                <button id="record-btn" class="record-btn">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    </svg>
+                </button>
+            </div>
+            <p id="record-status" class="record-status">按住或点击开始说话</p>
+        </section>
+        
+        <audio id="dj-audio-player" style="display: none;"></audio>
+
+        <div id="schedule-panel" class="schedule-panel">
+            <div class="panel-header">
+                <h3>📅 今日飞书同步看板</h3>
+                <button id="close-schedule-btn" class="close-panel-btn">×</button>
+            </div>
+            
+            <div class="schedule-list" id="schedule-list"></div>
+
+            <div class="feishu-bind-zone" id="feishu-bind-zone" style="display: none;">
+                <div class="bind-icon">🔒</div>
+                <h4>账户未打通飞书中枢</h4>
+                <p>本系统需要获得您的授权，才能安全检索今日日历</p>
+                <button id="feishu-connect-btn" class="auth-btn register">🔗 绑定我的飞书账号</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./app.js"></script>
+</body>
+</html>
