@@ -128,7 +128,7 @@ npm run dev
 | `QQ_MUSIC_COOKIE` | QQ 音乐 Cookie | 否（不填走 Mock） |
 | `OPENWEATHER_API_KEY` | OpenWeather Key | 否（不填走 Wttr.in） |
 | `CITY` | 城市 | 否（默认 Beijing） |
-| `TTS_SERVICE_URL` | TTS 服务地址 | 否（默认 http://127.0.0.1:8000） |
+| `TTS_SERVICE_URL` | TTS 服务地址 | 否（默认 http://127.0.0.1:8008） |
 | `NODE_ENV` | 运行环境 | 否（默认 development） |
 | `CORS_ORIGIN` | 跨域来源 | 否（默认 *） |
 | `JWT_SECRET` | JWT 签名密钥 | 否 |
