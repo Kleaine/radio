@@ -52,7 +52,7 @@ radio/
 
 #### 分工2 要做什么
 
-- 项目骨架：`package.json`、`tsconfig.json`、Fastify 入口文件
+- 项目骨架：`package.json`、`tsconfig.json`、Express 入口文件
 - `/api/dispatch` 路由：按 `意图规则表.md` 实现三层分发（正则指令 → 正则搜索 → LLM）
 - `/api/player/*` 路由：播放控制（播放/暂停/下一首/上一首/随机/循环）
 - SQLite 数据库：plays 表（记录播放历史，供给 context.service）
@@ -85,7 +85,7 @@ radio/
 | LLM | 豆包（火山引擎），OpenAI SDK，流式输出 |
 | 音乐 | QQ 音乐（qq-music-api + 绿钻 Cookie） |
 | 天气 | OpenWeatherMap / Wttr.in / Mock 三层回退 |
-| 后端 | Fastify + TypeScript + SQLite |
+| 后端 | Express + TypeScript + SQLite |
 | 前端 | React + Vite + PWA |
 
 ---
