@@ -35,6 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const djInfoTitle = document.querySelector('#dj-info h2');
     const djInfoDesc = document.querySelector('#dj-info p');
 
+    // 文本输入节点
+    const textInput = document.getElementById('text-input');
+    const textSendBtn = document.getElementById('text-send-btn');
+
     // 初始化默认声线为 温柔女声
     let currentVoice = 'gentle_female';
     let localToken = localStorage.getItem('dj_auth_token') || '';
@@ -173,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleToggleBtn.addEventListener('click', () => { schedulePanel.classList.add('show'); fetchFeishuSchedule(); });
     closeScheduleBtn.addEventListener('click', () => schedulePanel.classList.remove('show'));
 
-    // ================= 6. 核心业务层：全新双流串联控制逻辑 =================
+    // ================= 6. 声线切换 =================
     voiceTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             voiceTabs.forEach(t => t.classList.remove('active'));
@@ -182,10 +186,51 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // ================= 7. 通用 UI 工具函数 =================
+    const resetUI = () => {
+        djInfoTitle.textContent = '等待为您服务...';
+        djInfoDesc.textContent = '点击下方录音按钮开始对话';
+        recordStatus.textContent = '按住或点击开始说话';
+        recordBtn.classList.remove('recording');
+        visualizer.classList.remove('active');
+        textSendBtn.disabled = false;
+        textInput.disabled = false;
+        textInput.focus();
+    };
+
+    const appendUserMessage = (text) => {
+        const uDiv = document.createElement('div');
+        uDiv.className = 'message user-message';
+        uDiv.innerHTML = `<div class="message-content">${escapeHtml(text)}</div>`;
+        chatBox.appendChild(uDiv);
+        scrollToBottom();
+        return uDiv;
+    };
+
+    const appendSystemMessage = (html) => {
+        const sDiv = document.createElement('div');
+        sDiv.className = 'message system-message';
+        sDiv.innerHTML = `<div class="message-content">${html}</div>`;
+        chatBox.appendChild(sDiv);
+        scrollToBottom();
+        return sDiv;
+    };
+
+    const scrollToBottom = () => {
+        const container = chatBox.parentElement;
+        if (container) container.scrollTop = container.scrollHeight;
+    };
+
+    const escapeHtml = (str) => {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+
+    // ================= 8. 语音录制 + /api/chat（保留原有逻辑） =================
     const sendAudioToServer = async (blob) => {
         const formData = new FormData();
         formData.append('audio', blob, 'user_voice.webm');
-        formData.append('voice_style', currentVoice); // 将前端选定的女性声线送往后端渲染TTS
+        formData.append('voice_style', currentVoice);
 
         try {
             const response = await fetch('/api/chat', { 
@@ -197,29 +242,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.code === 200) {
                 const { userText, replyText, audioUrl, recommendSong } = result.data;
                 
-                // 1. 动态追加对话消息气泡到面板上
-                const uDiv = document.createElement('div'); 
-                uDiv.className = 'message user-message'; 
-                uDiv.innerHTML = `<div class="message-content">${userText}</div>`;
-                chatBox.appendChild(uDiv);
+                appendUserMessage(userText);
                 
                 const sDiv = document.createElement('div'); 
                 sDiv.className = 'message system-message';
-                let html = `<div class="message-content">${replyText}</div>`;
+                let html = `<div class="message-content">${escapeHtml(replyText)}</div>`;
                 if (recommendSong) {
-                    html += `
-                        <div class="recommendation-card">
-                            🎵 推荐曲目：《${recommendSong.title}》 - ${recommendSong.artist}
-                            <br><small style="color:var(--text-muted)">💡 决策因子：${recommendSong.reason}</small>
-                        </div>`;
+                    html += renderSongCard(recommendSong);
                 }
                 sDiv.innerHTML = html;
                 chatBox.appendChild(sDiv);
-                chatBox.parentElement.scrollTop = chatBox.parentElement.scrollHeight;
+                scrollToBottom();
                 
-                // 2. 双音频流高级自动化调度控制总线开始工作
                 if (audioUrl) {
-                    // 第一阶段：首先载入并播放使用选定声线生成的“歌曲介绍”TTS文件
                     audioPlayer.src = audioUrl;
                     audioPlayer.play()
                         .then(() => {
@@ -229,9 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         })
                         .catch(() => resetUI());
                     
-                    // 核心监听：当第一阶段的歌曲口播介绍播放完毕之后触发
                     audioPlayer.onended = () => {
-                        // 第二阶段：自动抓取后端给出的歌曲物理文件并装载播放
                         if (recommendSong && recommendSong.songUrl) {
                             audioPlayer.src = recommendSong.songUrl;
                             audioPlayer.play()
@@ -241,17 +274,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                     recordStatus.textContent = '音乐播放中，享受这一刻...';
                                 })
                                 .catch(() => resetUI());
-                            
-                            // 终焉阶段：当整首推荐歌曲彻底播放完后，重置系统UI回初始就绪态
-                            audioPlayer.onended = () => {
-                                resetUI();
-                            };
+                            audioPlayer.onended = () => resetUI();
                         } else {
                             resetUI();
                         }
                     };
                 } else if (recommendSong && recommendSong.songUrl) {
-                    // 安全容错：如果后端意外未能给出介绍音频，则前端直接免介绍切歌播放
                     audioPlayer.src = recommendSong.songUrl;
                     audioPlayer.play()
                         .then(() => {
@@ -266,14 +294,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else { alert(result.message); resetUI(); }
         } catch (e) { alert('语音计算中枢网关连接崩溃。'); resetUI(); }
-    };
-
-    const resetUI = () => {
-        djInfoTitle.textContent = '等待为您服务...';
-        djInfoDesc.textContent = '点击下方录音按钮开始对话';
-        recordStatus.textContent = '按住或点击开始说话';
-        recordBtn.classList.remove('recording');
-        visualizer.classList.remove('active');
     };
 
     recordBtn.addEventListener('click', async () => {
@@ -299,4 +319,238 @@ document.addEventListener('DOMContentLoaded', () => {
             recordStatus.textContent = '私有化计算集群动态推演中...';
         }
     });
+
+    // ================= 9. 文本输入 + /api/dispatch SSE 对接 =================
+    const sendTextDispatch = async (text) => {
+        textSendBtn.disabled = true;
+        textInput.disabled = true;
+        recordStatus.textContent = 'AI 思考中...';
+
+        appendUserMessage(text);
+
+        // 创建系统消息气泡，用于流式追加
+        const sDiv = document.createElement('div');
+        sDiv.className = 'message system-message';
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = '';
+        sDiv.appendChild(contentDiv);
+        chatBox.appendChild(sDiv);
+        scrollToBottom();
+
+        let buffer = '';
+        let currentEvent = null;
+
+        try {
+            const response = await fetch('/api/dispatch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localToken}`
+                },
+                body: JSON.stringify({ text, voice: currentVoice })
+            });
+
+            if (!response.body) {
+                throw new Error('响应体不可读');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // 保留未完整的一行
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line.startsWith('event:')) {
+                        currentEvent = line.slice(6).trim();
+                    } else if (line.startsWith('data:')) {
+                        const data = line.slice(5).trim();
+                        if (currentEvent === 'chunk') {
+                            contentDiv.textContent += data;
+                            scrollToBottom();
+                        } else if (currentEvent === 'done') {
+                            handleDoneEvent(data, sDiv);
+                        }
+                        currentEvent = null;
+                    } else if (line === '') {
+                        // SSE 空行分隔
+                    }
+                }
+            }
+
+            // 处理 buffer 中剩余内容
+            if (buffer.trim()) {
+                const line = buffer.trim();
+                if (line.startsWith('event:')) {
+                    currentEvent = line.slice(6).trim();
+                } else if (line.startsWith('data:')) {
+                    const data = line.slice(5).trim();
+                    if (currentEvent === 'chunk') {
+                        contentDiv.textContent += data;
+                    } else if (currentEvent === 'done') {
+                        handleDoneEvent(data, sDiv);
+                    }
+                }
+            }
+        } catch (err) {
+            contentDiv.textContent = '请求失败，请稍后重试。';
+            console.error('dispatch error:', err);
+        } finally {
+            resetUI();
+        }
+    };
+
+    const handleDoneEvent = (data, sDiv) => {
+        let payload;
+        try {
+            payload = JSON.parse(data);
+        } catch (e) {
+            console.error('done event JSON parse error:', e);
+            return;
+        }
+
+        const type = payload.type;
+        if (type === 'command') {
+            // 指令匹配成功，无需额外渲染
+            return;
+        }
+
+        if (type === 'error') {
+            const errDiv = document.createElement('div');
+            errDiv.className = 'error-toast';
+            errDiv.textContent = payload.message || '处理失败';
+            sDiv.appendChild(errDiv);
+            scrollToBottom();
+            return;
+        }
+
+        if (type === 'search') {
+            const list = payload.results || [];
+            const listContainer = document.createElement('div');
+            listContainer.className = 'search-list';
+            list.forEach(song => {
+                listContainer.innerHTML += renderSongCard(song, true);
+            });
+            sDiv.appendChild(listContainer);
+            scrollToBottom();
+            return;
+        }
+
+        if (type === 'plan') {
+            const items = payload.items || [];
+            playPlanItems(items, sDiv);
+            return;
+        }
+    };
+
+    // ================= 10. PlanResponse items[] 渲染与播放队列 =================
+    const playPlanItems = async (items, container) => {
+        if (!items.length) return;
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type === 'tts') {
+                const ttsDiv = document.createElement('div');
+                ttsDiv.className = 'tts-card';
+                ttsDiv.textContent = item.text || '';
+                container.appendChild(ttsDiv);
+                scrollToBottom();
+
+                if (item.ttsAudioUrl) {
+                    await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+                }
+            } else if (item.type === 'song') {
+                const songDiv = document.createElement('div');
+                songDiv.innerHTML = renderSongCard(item);
+                container.appendChild(songDiv);
+                scrollToBottom();
+
+                if (item.audioUrl) {
+                    await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
+                }
+            }
+        }
+
+        resetUI();
+    };
+
+    const playAudio = (url, desc) => {
+        return new Promise((resolve) => {
+            audioPlayer.src = url;
+            audioPlayer.play()
+                .then(() => {
+                    djInfoTitle.textContent = '正在播放';
+                    djInfoDesc.textContent = desc;
+                    recordStatus.textContent = '播放中...';
+                })
+                .catch(() => {
+                    // 播放失败也继续队列
+                });
+            audioPlayer.onended = resolve;
+            audioPlayer.onerror = resolve;
+        });
+    };
+
+    const renderSongCard = (song, selectable = false) => {
+        const title = escapeHtml(song.title || '');
+        const artist = escapeHtml(song.artist || '');
+        const reason = escapeHtml(song.reason || '');
+        const cover = song.coverUrl ? `<img src="${escapeHtml(song.coverUrl)}" alt="cover">` : `<div class="cover-placeholder">🎵</div>`;
+        const playable = !!song.audioUrl;
+        const playBtn = playable
+            ? `<button class="play-btn" data-url="${escapeHtml(song.audioUrl)}" title="播放">▶</button>`
+            : '';
+        const unplayable = !playable ? `<div class="unplayable">无法播放</div>` : '';
+        const reasonHtml = reason ? `<div class="reason">💡 ${reason}</div>` : '';
+
+        return `
+            <div class="song-card">
+                <div class="cover">${cover}</div>
+                <div class="info">
+                    <div class="title">${title}</div>
+                    ${artist ? `<div class="artist">${artist}</div>` : ''}
+                    ${reasonHtml}
+                    ${unplayable}
+                </div>
+                ${playBtn}
+            </div>
+        `;
+    };
+
+    // 事件委托：点击搜索结果的播放按钮
+    chatBox.addEventListener('click', (e) => {
+        const btn = e.target.closest('.play-btn');
+        if (!btn) return;
+        const url = btn.getAttribute('data-url');
+        if (url) {
+            audioPlayer.src = url;
+            audioPlayer.play().catch(() => {});
+        }
+    });
+
+    // 文本输入事件绑定
+    textSendBtn.addEventListener('click', () => {
+        const text = textInput.value.trim();
+        if (!text) return;
+        textInput.value = '';
+        sendTextDispatch(text);
+        textInput.focus();
+    });
+
+    textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            textSendBtn.click();
+        }
+    });
+
+    // 页面加载完成后自动聚焦输入框
+    setTimeout(() => textInput.focus(), 500);
 });
