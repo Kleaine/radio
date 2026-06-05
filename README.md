@@ -12,16 +12,31 @@
 ```
 radio/
 ├── apps/
-│   ├── web/               ← 前端（React 播放器，待开发）
-│   ├── tts/               ← TTS 语音合成（GPT-SoVITS，已完成）
-│   └── server/            ← 后端
-│       └── src/
-│           ├── services/   ← AI 大脑 + 外部 API（已完成）
-│           ├── prompts/    ← AI DJ 人设卡
-│           ├── docs/       ← AI 架构文档 + 节目示例 + 对接分析（分工5）
-│           └── interface/  ← 跨模块接口定义
-├── data/                  ← 运行时数据
-└── user/                  ← 用户画像
+│   ├── web/                 ← 前端（React 播放器，待开发）
+│   ├── tts/                 ← TTS 语音合成（分工4，已完成）
+│   │   ├── tts_service/     ← Python FastAPI 服务
+│   │   ├── configs/         ← 三种音色配置
+│   │   ├── assets/voices/   ← 参考音频
+│   │   ├── scripts/         ← 安装/启动脚本
+│   │   └── docs/            ← TTS_START.md 启动指南
+│   └── server/              ← 后端（分工2+分工5，已完成）
+│       ├── src/
+│       │   ├── services/    ← AI 大脑 + 外部 API（分工5）
+│       │   ├── routes/      ← HTTP 路由（分工2）
+│       │   ├── middleware/  ← JWT/错误/响应封装（分工2）
+│       │   ├── db/          ← SQLite 数据库（分工2）
+│       │   ├── scheduler/   ← 定时任务（分工2）
+│       │   ├── prompts/     ← AI DJ 人设卡（分工5）
+│       │   ├── interface/   ← 跨模块接口（分工5）
+│       │   ├── types/       ← 类型声明（分工2）
+│       │   └── docs/        ← AI 架构文档 + 示例 + 对接分析（分工5）
+│       ├── docs/            ← 后端接口文档 + 启动指南（分工2）
+│       ├── scripts/         ← 启动脚本
+│       ├── .env.example
+│       ├── package.json
+│       └── tsconfig.json
+├── data/                    ← 运行时数据（schedule.txt）
+└── user/                    ← 用户画像（taste / routines / mood-rules）
 ```
 
 ---
@@ -107,10 +122,15 @@ npm run dev
 
 | 变量 | 说明 | 必填 |
 |---|---|---|
+| `PORT` | 服务端口 | 否（默认 3000） |
 | `DOUBAO_API_KEY` | 豆包 API Key | 否（不填走 Mock） |
-| `QQ_MUSIC_COOKIE` | QQ 音乐 Cookie | 否 |
+| `DOUBAO_MODEL` | 豆包模型名 | 否（默认 doubao-lite-128k） |
+| `QQ_MUSIC_COOKIE` | QQ 音乐 Cookie | 否（不填走 Mock） |
 | `OPENWEATHER_API_KEY` | OpenWeather Key | 否（不填走 Wttr.in） |
-| `CITY` | 城市 | 否 |
+| `CITY` | 城市 | 否（默认 Beijing） |
+| `TTS_SERVICE_URL` | TTS 服务地址 | 否（默认 http://127.0.0.1:8008） |
+| `JWT_SECRET` | JWT 签名密钥 | 否 |
+| `FEISHU_APP_ID` | 飞书应用 ID | 否（不填走 Mock） |
 
 ---
 
@@ -122,6 +142,21 @@ npm run dev
 
 完整人设卡：`apps/server/src/prompts/plan-system.md`
 节目示例：`apps/server/src/docs/节目示例-分工5.md`
+
+---
+
+## 文档索引
+
+| 文档 | 位置 | 作者 |
+|---|---|---|
+| 项目架构说明 | `apps/server/src/docs/项目架构说明-分工5.md` | 分工5 |
+| API 接口文档 | `apps/server/docs/API接口文档-分工2.md` | 分工2 |
+| 后端启动指南 | `apps/server/docs/SERVER_START-分工2.md` | 分工2 |
+| 意图规则表 | `apps/server/src/docs/意图规则表-分工5.md` | 分工5 |
+| API 协同流程 | `apps/server/src/docs/API协同流程-分工5.md` | 分工5 |
+| TTS 对接分析 | `apps/server/src/docs/TTS对接分析-分工5.md` | 分工5 |
+| 节目示例 | `apps/server/src/docs/节目示例-分工5.md` | 分工5 |
+| TTS 启动指南 | `apps/tts/docs/TTS_START.md` | 分工4 |
 
 ---
 
