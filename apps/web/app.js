@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localToken}`
                 },
-                body: JSON.stringify({ text, voice: currentVoice })
+                body: JSON.stringify({ message: text, voice: currentVoice })
             });
 
             if (!response.body) {
