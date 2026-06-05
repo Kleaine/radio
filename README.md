@@ -92,15 +92,29 @@ radio/
 
 ## 快速开始
 
-> 当前仓库包含 AI Service Layer 的全部代码。`package.json`、`tsconfig.json`、路由层由后端同学提供。
+### 后端服务
 
 ```bash
-git clone <repo-url> radio
-cd radio
-pnpm install
-cp apps/server/.env.example apps/server/.env
-# 编辑 .env，填入 DOUBAO_API_KEY（不填则 Mock 模式运行）
-pnpm dev
+cd apps/server
+npm install
+cp .env.example .env
+# 编辑 .env，填入 API Key（不填则 Mock 模式运行）
+
+# Windows
+.\scripts\start-dev.ps1
+
+# Linux/Mac
+npm run dev
+```
+
+服务启动后访问 http://localhost:3000
+
+### 前端（待开发）
+
+```bash
+cd apps/web
+npm install
+npm run dev
 ```
 
 ---
