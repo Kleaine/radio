@@ -22,7 +22,7 @@ export interface MemoryWriter {
 }
 
 export function createMemoryWriter(userDir?: string): MemoryWriter {
-  const dir = path.resolve(userDir ?? process.cwd(), "user");
+  const dir = path.resolve(userDir ?? path.join(__dirname, "..", "..", "..", ".."), "user");
 
   let initialized = false;
 

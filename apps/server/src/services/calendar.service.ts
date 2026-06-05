@@ -49,7 +49,7 @@ function formatEvents(events: CalendarEvent[]): string {
 }
 
 export function createCalendarService(dataDir?: string): CalendarService {
-  const schedulePath = path.resolve(dataDir ?? process.cwd(), "data", "schedule.txt");
+  const schedulePath = path.resolve(dataDir ?? path.join(__dirname, "..", "..", "..", ".."), "data", "schedule.txt");
 
   return {
     async getTodayEvents(): Promise<CalendarEvent[]> {
