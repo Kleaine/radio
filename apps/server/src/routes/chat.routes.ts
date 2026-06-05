@@ -127,7 +127,7 @@ chatRoutes.post("/chat", authMiddleware, upload.single("audio"), async (req: Aut
   const voiceStyle = req.body.voice_style || "gentle_female";
 
   // 校验声线参数
-  const validVoices = ["gentle_female", "lively_female", "announcer_female"];
+  const validVoices = ["gentle_female", "lively_female", "announcer_male"];
   if (!validVoices.includes(voiceStyle)) {
     res.fail(400, `无效的声线参数，可选值: ${validVoices.join(", ")}`);
     return;

@@ -2,8 +2,8 @@
 
 私人 AI 音乐电台。AI DJ 根据时间、天气、日程和用户偏好，生成带有 DJ 串词的电台播报计划。
 
-> Status: Alpha — AI Service Layer complete. Frontend & routing in progress.
-> 5 轮审查 · 20+ 问题清零 · Mock-First 架构
+> Status: Alpha — AI + Backend complete. Frontend in progress.
+> Express + TypeScript + SQLite · Mock-First 架构
 
 ---
 
@@ -46,25 +46,9 @@ radio/
 |---|---|---|
 | 分工5 AI | 已完成 | 联调时可能需要微调 |
 | 分工4 TTS | 已完成 | 联调时可能需要微调 |
-| 分工2 后端 | 开发中 | 见下方验收要求 |
+| 分工2 后端 | 已完成 | 联调时可能需要微调 |
 | 分工1 前端 | 待开发 | 见下方 |
 | 分工3 ASR | 待开发 | 接口未定义，需与分工2 协商注入点 |
-
-#### 分工2 要做什么
-
-- 项目骨架：`package.json`、`tsconfig.json`、Express 入口文件
-- `/api/dispatch` 路由：按 `意图规则表.md` 实现三层分发（正则指令 → 正则搜索 → LLM）
-- `/api/player/*` 路由：播放控制（播放/暂停/下一首/上一首/随机/循环）
-- SQLite 数据库：plays 表（记录播放历史，供给 context.service）
-- SSE 流推送：`chunk` 事件（逐字文本）+ `done` 事件（完整 PlanResponse JSON）
-- WAV→URL 适配层：调分工4 TTS → 存音频 → 生成前端可访问的 URL → 传给 `enrichItems`
-- `.env` 加载：读环境变量 → 传进各 service 工厂函数
-
-#### 分工2 交付目标
-
-- AI 对接：`/api/dispatch` 能调通 `llmService.generatePlanStream()`，SSE 正常推送
-- 搜索对接：`/api/dispatch` 第二层正则能调 `musicService.search()`
-- 指令对接：`/api/dispatch` 第一层正则能触发 player 控制
 
 #### 分工1 要做什么
 
