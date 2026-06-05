@@ -2,7 +2,7 @@
 
 私人 AI 音乐电台。AI DJ 根据时间、天气、日程和用户偏好，生成带有 DJ 串词的电台播报计划。
 
-> Status: Alpha — AI + Backend complete. Frontend in progress.
+> Status: Alpha — AI + Backend + Frontend complete. ASR pending.
 > Express + TypeScript + SQLite · Mock-First 架构
 
 ---
@@ -12,7 +12,7 @@
 ```
 radio/
 ├── apps/
-│   ├── web/                 ← 前端（React 播放器，目录尚未创建，待开发）
+│   ├── web/                 ← 前端（vanilla JS + PWA，已完成）
 │   ├── tts/                 ← TTS 语音合成（分工4，已完成）
 │   │   ├── tts_service/     ← Python FastAPI 服务
 │   │   ├── configs/         ← 三种音色配置
@@ -62,7 +62,7 @@ radio/
 | 分工5 AI | 已完成 | 联调时可能需要微调 |
 | 分工4 TTS | 已完成 | 联调时可能需要微调 |
 | 分工2 后端 | 已完成 | 联调时可能需要微调 |
-| 分工1 前端 | 待开发 | 见下方 |
+| 分工1 前端 | 已完成 | 联调时可能需要微调 |
 | 分工3 ASR | 待开发 | 接口未定义，需与分工2 协商注入点 |
 
 #### 分工1 要做什么
@@ -85,7 +85,7 @@ radio/
 | 音乐 | QQ 音乐（qq-music-api + 绿钻 Cookie） |
 | 天气 | OpenWeatherMap / Wttr.in / Mock 三层回退 |
 | 后端 | Express + TypeScript + SQLite |
-| 前端 | React + Vite + PWA |
+| 前端 | Vanilla JS + PWA + SSE 流式 |
 
 ---
 

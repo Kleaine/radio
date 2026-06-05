@@ -1,0 +1,8 @@
+# Runtime generated audio files
+*.wav
+*.mp3
+*.ogg
+*.webm
+/audio/
+/tts/
+/temp/
