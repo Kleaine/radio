@@ -19,7 +19,8 @@
     "node-cron": "^3.0.3",
     "openai": "^4.52.1",
     "better-sqlite3": "^11.1.2",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "qq-music-api": "^1.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
