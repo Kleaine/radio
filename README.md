@@ -18,7 +18,7 @@ radio/
 │       └── src/
 │           ├── services/   ← AI 大脑 + 外部 API（已完成）
 │           ├── prompts/    ← AI DJ 人设卡
-│           ├── docs/       ← 架构文档 + 节目示例 + 审查报告
+│           ├── docs/       ← 架构文档 + 节目示例 + 对接分析
 │           └── interface/  ← 跨模块接口定义
 ├── data/                  ← 运行时数据
 └── user/                  ← 用户画像
