@@ -55,15 +55,65 @@ cd apps/tts
 ```
 radio/
 ├── apps/
-│   ├── web/          ← 前端（PWA 播放器）
-│   ├── tts/          ← TTS 语音合成
-│   └── server/       ← 后端（API + AI 大脑）
-│       └── src/
-│           ├── services/    ← LLM / 音乐 / 天气 / 日历 / 偏好记忆
-│           ├── routes/      ← dispatch / audio / chat / player
-│           └── prompts/     ← AI DJ 人设卡
-├── data/             ← QQ 音乐桥接 + 日程 + 样本音频
-└── user/             ← 用户画像（口味 / 作息 / 情绪规则）
+│   ├── web/                          ← 前端 PWA 播放器（分工1）
+│   │   ├── index.html                ← 主页面
+│   │   ├── app.js                    ← 核心逻辑（SSE + 播放队列 + 录音）
+│   │   ├── style-v3.css              ← 暗色电台主题
+│   │   ├── manifest.json             ← PWA 配置
+│   │   └── sw.js                     ← Service Worker
+│   │
+│   ├── tts/                          ← TTS 语音合成（分工4）
+│   │   ├── tts_service/              ← GPT-SoVITS FastAPI 服务
+│   │   ├── configs/voices.json       ← 三种音色配置
+│   │   ├── assets/voices/            ← 参考音频
+│   │   └── scripts/                  ← 安装/启动脚本
+│   │
+│   └── server/                       ← 后端 API + AI 大脑（分工2+5）
+│       ├── src/
+│       │   ├── index.ts              ← Express 入口
+│       │   ├── services/             ← AI 大脑（分工5）
+│       │   │   ├── llm.service.ts    ← 豆包流式调用
+│       │   │   ├── context.service.ts← 上下文组装
+│       │   │   ├── music.service.ts  ← QQ音乐桥接 + Mock
+│       │   │   ├── weather.service.ts← 天气三层回退
+│       │   │   ├── calendar.service.ts← 日程读写
+│       │   │   ├── memory-writer.ts  ← 偏好自动记录
+│       │   │   └── plan-enrich.ts    ← 歌曲补全 + 智能过滤
+│       │   ├── routes/               ← HTTP 路由
+│       │   │   ├── dispatch.routes.ts← 三层意图分发 + SSE
+│       │   │   ├── audio.routes.ts   ← 音频代理 + 预缓存
+│       │   │   ├── chat.routes.ts    ← 语音聊天
+│       │   │   ├── player.routes.ts  ← 播放控制
+│       │   │   ├── auth.routes.ts    ← 登录注册
+│       │   │   └── schedule.routes.ts← 飞书日程
+│       │   ├── middleware/           ← JWT / 错误 / 响应封装
+│       │   ├── db/                   ← SQLite 初始化
+│       │   ├── prompts/              ← AI DJ 人设卡
+│       │   │   └── plan-system.md
+│       │   ├── interface/            ← 跨模块接口
+│       │   └── docs/                 ← 架构文档 + 示例
+│       ├── docs/                     ← 接口文档 + 启动指南
+│       ├── tts/                      ← TTS 音频输出
+│       ├── .env.example
+│       └── package.json
+│
+├── data/
+│   ├── qq_bridge.py                  ← QQ音乐 Python 桥接
+│   ├── qq_login.py                   ← QQ音乐扫码登录
+│   ├── qq_credential.json            ← 登录凭证（不提交）
+│   ├── schedule.txt                  ← 日程文件
+│   └── music/demo.wav                ← 样本音频
+│
+├── user/
+│   ├── taste.md                      ← 音乐品味
+│   ├── routines.md                   ← 作息习惯
+│   └── mood-rules.md                 ← 情绪规则
+│
+├── docs/                             ← 项目文档
+│   ├── PRODUCT_SPEC_AI_RADIO.md
+│   └── DEVELOPMENT_SPEC_AI_RADIO.md
+│
+└── README.md
 ```
 
 ---
