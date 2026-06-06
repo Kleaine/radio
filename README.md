@@ -108,13 +108,9 @@ npm run dev
 
 服务启动后访问 http://localhost:3000
 
-### 前端（待开发）
+### 前端
 
-```bash
-cd apps/web
-npm install
-npm run dev
-```
+前端为纯静态文件，由后端 Express 静态服务托管。启动后端后访问 `http://localhost:3000` 即可。
 
 ---
 
