@@ -373,14 +373,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (line.startsWith('data:')) {
                         const data = line.slice(5).trim();
                         if (currentEvent === 'chunk') {
-                            contentDiv.textContent += data;
-                            scrollToBottom();
+                            // 流式文字只显示在状态栏，不在聊天气泡中累积
+                            // DJ 完整文字通过 TTS 卡片展示，避免重复
+                            recordStatus.textContent = 'DJ 正在播报: ' + data.slice(-30);
+                        } else if (currentEvent === 'status') {
+                            recordStatus.textContent = data;
                         } else if (currentEvent === 'done') {
                             handleDoneEvent(data, sDiv);
                         }
                         currentEvent = null;
-                    } else if (line === '') {
-                        // SSE 空行分隔
                     }
                 }
             }
@@ -394,6 +395,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = line.slice(5).trim();
                     if (currentEvent === 'chunk') {
                         contentDiv.textContent += data;
+                    } else if (currentEvent === 'status') {
+                        recordStatus.textContent = data;
                     } else if (currentEvent === 'done') {
                         handleDoneEvent(data, sDiv);
                     }
@@ -402,9 +405,12 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             contentDiv.textContent = '请求失败，请稍后重试。';
             console.error('dispatch error:', err);
-        } finally {
             resetUI();
         }
+        // 恢复输入，但不重置播放器（TTS/歌曲可能正在播放）
+        textSendBtn.disabled = false;
+        textInput.disabled = false;
+        textInput.focus();
     };
 
     const handleDoneEvent = (data, sDiv) => {
@@ -444,6 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (type === 'plan') {
+            // 旧 done 事件中的 plan 类型，兼容
             const items = payload.items || [];
             playPlanItems(items, sDiv);
             return;
@@ -454,29 +461,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
 
-        // 第一步：先渲染所有卡片（不等待播放）
+        // 第一步：渲染。开场白(tts[0])已流式显示，跳过。
+        // 串词(中间 tts)放在下一首歌曲卡片上方。
+        let pendingTtsText = '';
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.type === 'tts') {
-                if (i === 0) continue; // 开场白已在流式推送时显示
-                const d = document.createElement('div');
-                d.className = 'tts-card';
-                d.textContent = item.text || '';
-                container.appendChild(d);
+                if (i === 0) continue; // 开场白，已流式显示
+                pendingTtsText = item.text || '';
             } else if (item.type === 'song') {
+                if (pendingTtsText) {
+                    const ttsDiv = document.createElement('div');
+                    ttsDiv.className = 'tts-card';
+                    ttsDiv.textContent = pendingTtsText;
+                    container.appendChild(ttsDiv);
+                    pendingTtsText = '';
+                }
                 const d = document.createElement('div');
                 d.innerHTML = renderSongCard(item);
                 container.appendChild(d);
             }
         }
+        // 结尾串词（如果没有后续歌曲）
+        if (pendingTtsText) {
+            const ttsDiv = document.createElement('div');
+            ttsDiv.className = 'tts-card';
+            ttsDiv.textContent = pendingTtsText;
+            container.appendChild(ttsDiv);
+        }
         scrollToBottom();
 
-        // 第二步：顺序播放
+        // 第二步：按顺序自动播放。全部播完才停。
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
-            if (item.type === 'tts' && i === 0 && item.ttsAudioUrl) {
-                await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
-            } else if (item.type === 'tts' && i > 0 && item.ttsAudioUrl) {
+            if (item.type === 'tts' && item.ttsAudioUrl) {
                 await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
             } else if (item.type === 'song' && item.audioUrl) {
                 await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
@@ -508,12 +526,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const artist = escapeHtml(song.artist || '');
         const reason = escapeHtml(song.reason || '');
         const cover = song.coverUrl ? `<img src="${escapeHtml(song.coverUrl)}" alt="cover">` : `<div class="cover-placeholder">🎵</div>`;
+        const reasonHtml = reason ? `<div class="reason">💡 ${reason}</div>` : '';
         const playable = !!song.audioUrl;
         const playBtn = playable
             ? `<button class="play-btn" data-url="${escapeHtml(song.audioUrl)}" title="播放">▶</button>`
             : '';
         const unplayable = !playable ? `<div class="unplayable">无法播放</div>` : '';
-        const reasonHtml = reason ? `<div class="reason">💡 ${reason}</div>` : '';
 
         return `
             <div class="song-card">

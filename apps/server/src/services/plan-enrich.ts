@@ -29,9 +29,9 @@ export async function enrichItems(
   config: EnrichConfig
 ): Promise<EnrichedItem[]> {
   const { musicService, ttsService } = config;
-  const enriched: EnrichedItem[] = [];
 
-  for (const item of items) {
+  // 并行处理所有 items：TTS 合成 + 歌曲搜索同时进行
+  const tasks = items.map(async (item, index) => {
     if (item.type === "tts") {
       let ttsAudioUrl = "";
       if (ttsService && item.text) {
@@ -41,50 +41,78 @@ export async function enrichItems(
           console.error("[enrich] TTS 合成失败:", e.message);
         }
       }
-      enriched.push({
-        type: "tts",
-        title: "",
-        artist: "",
-        coverUrl: "",
-        audioUrl: ttsAudioUrl,
-        text: item.text,
-        ttsAudioUrl,
-      });
-      continue;
+      return {
+        index,
+        data: {
+          type: "tts" as const,
+          title: "",
+          artist: "",
+          coverUrl: "",
+          audioUrl: ttsAudioUrl,
+          text: item.text,
+          ttsAudioUrl,
+        },
+      };
     }
 
     // song item
-    const query = item.query ?? `${item.title ?? ""} ${item.artist ?? ""}`.trim();
+    const artist = item.artist ?? "";
+    const title = item.title ?? "";
+    // 搜索关键词始终包含歌手名，避免"沙滩"匹配到洛克王国之类的
+    const query = item.query ?? `${artist} ${title}`.trim();
     try {
-      const songs = await musicService.search(query, 1);
-      if (songs.length > 0) {
-        const song = songs[0];
-        const songUrl = await musicService.getSongUrl(song.id);
-        enriched.push({
-          type: "song",
-          songId: song.id,
-          title: song.title,
-          artist: song.artist,
-          coverUrl: song.coverUrl,
-          audioUrl: songUrl.url ?? "",
-          reason: item.reason,
-        });
-        continue;
+      // 多搜几首，排除 Live/现场版/有声书/播客/小说，优先取正式音乐
+      const allSongs = await musicService.search(query, 8);
+      const badPattern = /live|现场|演唱会|feat\.|remix|伴奏|纯音乐|cover|翻唱|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教/i;
+      // 优先匹配歌手+歌名都对的正式版
+      // 括号统一化：QQ音乐有时用中文括号，LLM可能输出英文括号
+      const normalize = (s: string) => s.replace(/[（(]/g, '(').replace(/[）)]/g, ')').toLowerCase();
+      const normTitle = normalize(title);
+      const artistLower = artist.toLowerCase();
+      const exactMatch = allSongs.find(s => {
+        const nt = normalize(s.title);
+        return !badPattern.test(s.title) &&
+          (nt.includes(normTitle) || normTitle.includes(nt)) &&
+          (!artistLower || s.artist.toLowerCase().includes(artistLower) || artistLower.includes(s.artist.toLowerCase()));
+      });
+      const studioSong = exactMatch ?? allSongs.find(s => !badPattern.test(s.title) && (!artistLower || s.artist.toLowerCase().includes(artistLower)));
+      const song = studioSong ?? allSongs.find(s => !badPattern.test(s.title)) ?? allSongs[0];
+      if (song) {
+        // 播放链接懒加载：不在这里取 URL，点播放时走 /api/audio?mid=xxx 代理
+        return {
+          index,
+          data: {
+            type: "song" as const,
+            songId: song.id,
+            title: song.title,
+            artist: song.artist,
+            coverUrl: song.coverUrl,
+            audioUrl: `/api/audio?mid=${encodeURIComponent(song.id)}`,
+            reason: item.reason,
+          },
+        };
       }
     } catch (e: any) {
       console.error("[enrich] 歌曲搜索失败:", query, e.message);
     }
 
     // 搜索失败，保留原始信息
-    enriched.push({
-      type: "song",
-      title: item.title ?? query,
-      artist: item.artist ?? "",
-      coverUrl: item.coverUrl ?? "",
-      audioUrl: item.audioUrl ?? "",
-      reason: item.reason,
-    });
-  }
+    return {
+      index,
+      data: {
+        type: "song" as const,
+        title: item.title ?? query,
+        artist: item.artist ?? "",
+        coverUrl: item.coverUrl ?? "",
+        audioUrl: item.audioUrl ?? "",
+        reason: item.reason,
+      },
+    };
+  });
 
-  return enriched;
+  const results = await Promise.all(tasks);
+
+  // 按原始 index 排序，保证 items 顺序不变
+  results.sort((a, b) => a.index - b.index);
+  return results.map(r => r.data as EnrichedItem);
 }

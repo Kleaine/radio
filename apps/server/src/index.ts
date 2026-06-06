@@ -21,6 +21,7 @@ import { scheduleRoutes } from "./routes/schedule.routes";
 import { chatRoutes } from "./routes/chat.routes";
 import { dispatchRoutes } from "./routes/dispatch.routes";
 import { playerRoutes } from "./routes/player.routes";
+import { audioRoutes } from "./routes/audio.routes";
 import { errorHandler } from "./middleware/error-handler";
 import { responseWrapper } from "./middleware/response-wrapper";
 import { startScheduledTasks } from "./scheduler";
@@ -57,6 +58,7 @@ app.use("/api", scheduleRoutes);
 app.use("/api", chatRoutes);
 app.use("/api", dispatchRoutes);
 app.use("/api/player", playerRoutes);
+app.use("/api", audioRoutes);
 
 // 健康检查
 app.get("/health", (_req, res) => {

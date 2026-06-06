@@ -1,6 +1,6 @@
 # Radio — AI 音乐电台
 
-私人 AI 音乐电台。AI DJ 根据时间、天气、日程和用户偏好，生成带有 DJ 串词的电台播报计划，搜索真实 QQ 音乐并播放。
+私人 AI 音乐电台。AI DJ 小雨根据时间、天气、日程、用户口味和播放历史，生成带有 DJ 串词的电台播报计划，搜索真实 QQ 音乐并播放。
 
 > Status: Alpha — AI + Backend + Frontend complete. Music playback via QQ Music API.
 > Express + TypeScript + SQLite + Python Bridge · Mock-First 架构
@@ -30,22 +30,25 @@ radio/
 │       ├── src/
 │       │   ├── services/        ← AI 大脑 + 外部 API（分工5）
 │       │   │   ├── llm.service.ts        ← 豆包流式播报计划
-│       │   │   ├── context.service.ts    ← 时间/天气/日程/偏好组装
+│       │   │   ├── context.service.ts    ← 时间/天气/日程/口味/历史组装
 │       │   │   ├── music.service.ts      ← QQ音乐 Python桥接 + Mock
-│       │   │   ├── weather.service.ts    ← 三层回退天气
+│       │   │   ├── weather.service.ts    ← 三层回退天气 + 30min缓存
 │       │   │   ├── calendar.service.ts   ← schedule.txt 读写
 │       │   │   ├── memory-writer.ts      ← 用户偏好自动记录
-│       │   │   └── plan-enrich.ts        ← AI → 真实歌曲补全
-│       │   ├── routes/          ← HTTP 路由（分工2）
-│       │   ├── middleware/      ← JWT/错误/响应封装（分工2）
-│       │   ├── db/              ← SQLite 数据库（分工2）
-│       │   ├── scheduler/       ← 定时任务（分工2）
+│       │   │   └── plan-enrich.ts        ← AI → 真实歌曲补全 + 智能过滤
+│       │   ├── routes/          ← HTTP 路由
+│       │   │   ├── dispatch.routes.ts    ← 三层意图分发 + SSE 流式
+│       │   │   ├── audio.routes.ts       ← 音频代理（懒加载 + 预缓存）
+│       │   │   ├── chat.routes.ts        ← 语音聊天路由
+│       │   │   └── player.routes.ts      ← 播放器控制
+│       │   ├── middleware/      ← JWT/错误/响应封装
+│       │   ├── db/              ← SQLite 数据库
 │       │   ├── prompts/         ← AI DJ 人设卡（分工5）
-│       │   ├── interface/       ← 跨模块接口（分工5）
-│       │   ├── types/           ← 类型声明（分工2）
+│       │   │   └── plan-system.md        ← 小雨人设 + 选歌原则 + 输出格式
+│       │   ├── interface/       ← 跨模块接口定义
+│       │   ├── types/           ← 类型声明
 │       │   └── docs/            ← AI 架构文档 + 示例 + 对接分析（分工5）
-│       ├── docs/                ← 后端接口文档 + 启动指南（分工2）
-│       ├── scripts/             ← 启动脚本
+│       ├── docs/                ← 后端接口文档 + 启动指南
 │       ├── .env.example
 │       ├── package.json
 │       └── tsconfig.json
@@ -53,14 +56,14 @@ radio/
 ├── data/                        ← 运行时数据
 │   ├── schedule.txt             ← 日程文件
 │   ├── music/demo.wav           ← 样本音频（播放兜底）
-│   ├── qq_bridge.py             ← QQ音乐 Python 桥接（搜索+播放链接）
-│   ├── qq_credential.json       ← QQ音乐扫码登录凭证（.gitignore 应忽略）
+│   ├── qq_bridge.py             ← QQ音乐 Python 桥接（搜索+播放链接+口味拉取）
+│   ├── qq_credential.json       ← QQ音乐扫码登录凭证
 │   └── qq_login.py              ← QQ音乐扫码登录脚本
 │
 └── user/                        ← 用户画像
-    ├── taste.md
-    ├── routines.md
-    └── mood-rules.md
+    ├── taste.md                 ← 音乐品味
+    ├── routines.md              ← 作息习惯
+    └── mood-rules.md            ← 情绪规则
 ```
 
 ---
@@ -69,7 +72,7 @@ radio/
 
 | 分工 | 状态 | 说明 |
 |---|---|---|
-| 分工5 AI | 已完成 | 联调时可能需要微调 |
+| 分工5 AI | 已完成 | LLM + 意图识别 + DJ文案 + 音乐/天气/日历 API |
 | 分工4 TTS | 已完成 | GPT-SoVITS 本地服务，三种音色 |
 | 分工2 后端 | 已完成 | Express + SQLite + SSE 流式 + JWT |
 | 分工1 前端 | 已完成 | Vanilla JS + PWA + dispatch SSE + 录音 |
@@ -105,11 +108,8 @@ npm run dev
 
 ### 2. （可选）QQ音乐扫码登录
 
-首次使用需扫码登录一次，凭证有效期至 2026-07-25：
-
 ```bash
 python data/qq_login.py
-# 打开生成的 data/qq_qrcode.png，用 QQ 扫描
 ```
 
 不登录也能搜到歌名歌手封面，只是播放走样本音频。
@@ -118,7 +118,6 @@ python data/qq_login.py
 
 ```bash
 cd apps/tts
-# 参考 docs/TTS_START.md 安装 GPT-SoVITS
 .\scripts\run_tts_service.ps1
 ```
 
@@ -132,11 +131,11 @@ cd apps/tts
 
 | 变量 | 说明 | 必填 |
 |---|---|---|
-| `DOUBAO_API_KEY` | 豆包 API Key | 是（不填走 Mock） |
-| `DOUBAO_MODEL` | 豆包模型名 | 否（默认 doubao-seed-2-0-lite-260215） |
+| `DOUBAO_API_KEY` | 豆包 API Key | 是 |
+| `DOUBAO_MODEL` | 豆包模型名 | 否 |
 | `TTS_SERVICE_URL` | TTS 服务地址 | 否（默认 http://127.0.0.1:8008） |
-| `OPENWEATHER_API_KEY` | OpenWeather Key | 否（不填走 Wttr.in） |
-| `CITY` | 城市 | 否（默认 Beijing） |
+| `OPENWEATHER_API_KEY` | OpenWeather Key | 否 |
+| `CITY` | 城市 | 否 |
 | `PORT` | 服务端口 | 否（默认 3000） |
 | `JWT_SECRET` | JWT 密钥 | 否 |
 
@@ -144,10 +143,11 @@ cd apps/tts
 
 ## AI DJ 小雨
 
-专业电台 DJ 人设。说话有质感——不说"这是一首治愈系歌曲"，说"钢琴进来的时候，像有人轻轻拍你的肩膀"。
+> "我是小雨，你的私人音乐电台。说句话，我陪你听歌。"
+
+专业电台 DJ 人设。有阅历、有品味、不赶时间。说话像跟老朋友分享刚发现的好东西。不说"这是一首治愈系歌曲"，说"钢琴进来的时候，像有人轻轻拍你的肩膀"。
 
 完整人设卡：`apps/server/src/prompts/plan-system.md`
-节目示例：`apps/server/src/docs/节目示例-分工5.md`
 
 ---
 
@@ -163,25 +163,54 @@ cd apps/tts
 | TTS 对接分析 | `apps/server/src/docs/TTS对接分析-分工5.md` | 分工5 |
 | 节目示例 | `apps/server/src/docs/节目示例-分工5.md` | 分工5 |
 | TTS 启动指南 | `apps/tts/docs/TTS_START.md` | 分工4 |
-| 代码审计报告 | `apps/server/src/docs/代码审计报告-2026-06-05.md` | 分工5 |
-
----
-
-## 工程质量
-
-- **Mock-First 架构**：所有外部依赖（LLM、音乐、天气）均有 Mock 实现，无 API Key 也能完整演示
-- **三层容错**：天气 3 层回退、JSON 解析 3 层提取、LLM 超时 + 默认歌单兜底
-- **Python 桥接**：通过 `qqmusic-api-python` 实现真实 QQ 音乐搜索与播放链接获取
 
 ---
 
 ## 更新日志
 
-### 2026-06-06
-- 音乐服务重写：弃用 `qq-music-api` npm 包（2022年已废弃），改用 Python `qqmusic-api-python` 桥接
-- 接入 [L-1124/QQMusicApi](https://github.com/L-1124/QQMusicApi)（2026.6 维护中）
+### 2026-06-06（分工5 AI 服务层深度优化） — @Kleaine
+
+**DJ 人设与文案质量**
+- 重写 plan-system.md 人设卡：明确"小雨"第一人称 DJ 视角，多用"我"、"我们"、"陪你"、"一起"等 DJ 陪伴感语言
+- 修正开场白与串词重复问题：开场白只做寒暄不介绍歌曲，串词专注音乐本身，职责彻底分开
+- 开场白 2-5 句自由发挥，融入日程、时段、天气感受而非播报数据
+- 新增选歌多维原则：综合口味、天气、时段、日程、历史、场景七个维度选歌，而非随机推荐
+- 新增风格多样性规则：新老交替、偶尔惊喜、风格过渡自然、不套路
+- 新增 5 组参考范例（雨天/深夜/冷知识/lofi/日程融合/陪伴感），给 LLM 明确的语感参照
+
+**性能优化**
+- 播放链接懒加载：新增 `/api/audio?mid=xxx` 代理端点，enrich 阶段不再阻塞取 URL，响应速度大幅提升
+- URL 预缓存机制：enrich 完成后后台批量预取所有播放链接，点播时缓存命中秒出
+- enrich 并行化：TTS 合成 + 歌曲搜索从串行改为 Promise.all 并行，等待时间从累加降为取最慢
+- 天气缓存从 5 分钟延长到 30 分钟，修复每次请求重建 service 导致缓存失效的 bug
+- 服务单例懒加载：修复模块初始化时 dotenv 未加载导致 API Key 为空的 401 错误
+
+**搜索精准度**
+- 新增 Live/现场/翻唱/有声书/播客/小说/广播剧/儿歌等 20+ 关键词过滤，排除非音乐内容
+- 歌手名强制参与搜索关键词，避免"沙滩"匹配到洛克王国等无关结果
+- 搜索结果按歌手名+歌名双重验证匹配，优先取完全匹配的正式版
+- 中英文括号统一化处理，解决 QQ 音乐括号格式不一致导致的漏匹配
+
+**上下文与记忆**
+- 新增用户常听歌手 Top 10 口味画像，从播放历史自动统计
+- 最近播放防重复从 10 首增加到 25 首，明确标注"不要再推荐这些歌"
+- 新增 AI 回复记忆机制：记录最近 5 次回复摘要，下次对话时避免重复话题
+- 天气信息格式优化：标注"仅供参考，不需要每次都提天气"，避免 LLM 机械复读温度数字
+
+**QQ 音乐桥接**
+- 新增收藏歌曲、自建歌单、收藏歌单、每日推荐等口味数据拉取接口
+- 新增 `pull_all_taste()` 一键拉取全部口味档案
+
+**前端配合**
+- 进场问候语从"验证通过！语音交互智能AI系统已就绪"改为"我是小雨，你的私人音乐电台"
+- 开场白与串词渲染分离，避免 DJ 文字重复显示
+
+---
+
+### 2026-06-05
+- 音乐服务重写：弃用 qq-music-api npm 包（2022年已废弃），改用 Python qqmusic-api-python 桥接
+- 接入 [L-1124/QQMusicApi](https://github.com/L-1124/QQMusicApi)
 - 支持 QQ 扫码登录获取完整凭证，实现真实歌曲播放链接
-- 前端 dispatch SSE 流式对接完成，文字输入 + PlanResponse items[] 播放
+- 前端 dispatch SSE 流式对接完成
 - 修复 CWD 路径偏移导致的 prompt/日程/画像静默加载失败
 - 统一 TTS 端口为 8008
-- 合并文档目录，标注分工

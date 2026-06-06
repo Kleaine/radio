@@ -73,7 +73,7 @@ export function createWeatherService(config?: { openWeatherApiKey?: string; city
   const city = config?.city ?? "Beijing";
   let cachedWeather: WeatherData | null = null;
   let lastFetchTime = 0;
-  const CACHE_TTL = 5 * 60 * 1000; // 5 分钟缓存
+  const CACHE_TTL = 30 * 60 * 1000; // 30 分钟缓存，天气不会频繁变化
 
   return {
     async getCurrent(): Promise<WeatherData> {
