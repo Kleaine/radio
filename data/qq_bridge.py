@@ -40,18 +40,24 @@ async def search_songs(keyword: str, limit: int = 5):
     urls_data = await api.song.get_song_urls(tracks)
     sip = urls_data.sip[0] if hasattr(urls_data, 'sip') and urls_data.sip else "http://ws.stream.qqmusic.qq.com/"
 
+    # 按 mid 建索引，避免 tracks/songs 顺序不一致导致错配
+    track_map = {t.mid: t for t in tracks}
+    url_map = {}
+    for i, u in enumerate(urls_data.data if hasattr(urls_data, 'data') else []):
+        if i < len(tracks) and u.purl:
+            url_map[tracks[i].mid] = f"{sip}{u.purl}"
+
     out = []
-    for i, track in enumerate(tracks):
-        s = songs[i]
-        purl = urls_data.data[i].purl if i < len(urls_data.data) and urls_data.data[i].purl else ""
-        full_url = f"{sip}{purl}" if purl else ""
+    for s in songs:
+        track = track_map.get(s.mid)
+        full_url = url_map.get(s.mid, "")
         out.append({
-            "mid": track.mid,
-            "title": track.title if hasattr(track, "title") else s.name,
-            "artist": ", ".join(a.name for a in track.singer) if hasattr(track, "singer") else "",
+            "mid": s.mid,
+            "title": track.title if track and hasattr(track, "title") else s.name,
+            "artist": ", ".join(a.name for a in track.singer) if track and hasattr(track, "singer") else "",
             "cover": f"https://y.qq.com/music/photo_new/T002R300x300M000{s.album.mid}.jpg"
                      if hasattr(s, "album") and s.album and s.album.mid else "",
-            "duration": track.interval * 1000 if hasattr(track, "interval") else 0,
+            "duration": track.interval * 1000 if track and hasattr(track, "interval") else 0,
             "url": full_url,
         })
     return out
