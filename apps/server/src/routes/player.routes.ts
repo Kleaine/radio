@@ -2,6 +2,7 @@
 // 播放/暂停/下一首/上一首/随机/循环
 
 import { Router, Request, Response } from "express";
+import { getDb } from "../db/init";
 
 export const playerRoutes = Router();
 
@@ -125,4 +126,23 @@ playerRoutes.post("/playlist", (req: Request, res: Response) => {
   playerState.updatedAt = new Date().toISOString();
 
   res.success(playerState, "播放列表已更新");
+});
+
+// POST /api/player/report-play — 前端每次播歌时上报，用于防重复
+playerRoutes.post("/report-play", (req: Request, res: Response) => {
+  const { songId, title, artist, skipped } = req.body;
+  if (!title) {
+    res.fail(400, "缺少 title");
+    return;
+  }
+  try {
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO plays (user_id, song_id, song_title, artist, skipped)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(req.body.userId || 0, songId || "", title, artist || "", skipped ? 1 : 0);
+    res.success(null, "已记录");
+  } catch (err: any) {
+    res.fail(500, err.message);
+  }
 });
