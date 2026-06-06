@@ -1,6 +1,43 @@
-// music.service.ts — QQ音乐服务（Mock + 真实 双实现）
+// music.service.ts — QQ音乐服务（Mock + Python 桥接 双实现）
 
+import { execFile } from "child_process";
+import path from "path";
 import type { MusicService, Song, SongUrlResult, LyricResult } from "../interface/music.service.interface";
+
+const BRIDGE = path.resolve(__dirname, "..", "..", "..", "..", "data", "qq_bridge.py");
+// 按优先级尝试找 Python（先读环境变量，再试常见路径，最后 fallback 到 python 命令）
+const PYTHON_PATHS = [
+  process.env.PYTHON_PATH,
+  "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+  "python3",
+  "python",
+].filter(Boolean) as string[];
+
+let _pythonPath: string | null = null;
+async function findPython(): Promise<string> {
+  if (_pythonPath) return _pythonPath;
+  for (const p of PYTHON_PATHS) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        execFile(p, ["--version"], { timeout: 5000 }, (err) => err ? reject(err) : resolve());
+      });
+      _pythonPath = p;
+      return p;
+    } catch {}
+  }
+  return "python"; // fallback
+}
+
+async function callBridge(subcmd: string, arg: string, limit?: number): Promise<any> {
+  const python = await findPython();
+  return new Promise((resolve) => {
+    const args = limit ? [BRIDGE, subcmd, arg, String(limit)] : [BRIDGE, subcmd, arg];
+    execFile(python, args, { maxBuffer: 2 * 1024 * 1024, timeout: 60000, env: { ...process.env, PYTHONIOENCODING: "utf-8" } }, (err, stdout) => {
+      if (err) { console.error("[bridge] execFile error:", err.message); resolve(null); return; }
+      try { resolve(JSON.parse(stdout)); } catch (e) { console.error("[bridge] JSON parse error:", String(e)); resolve(null); }
+    });
+  });
+}
 
 // ── Mock 实现 ──
 
@@ -27,106 +64,31 @@ export class MockMusicService implements MusicService {
   }
 }
 
-// ── 真实实现：直接调 QQ 音乐 u.y.qq.com 新接口 ──
-
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+// ── 真实实现：Python 桥接到 qqmusic_api（扫码登录后可用）──
 
 export class QQMusicService implements MusicService {
-  constructor(private cookie: string) {}
-
-  private get headers(): Record<string, string> {
-    return {
-      "User-Agent": UA,
-      "Referer": "https://y.qq.com",
-      "Cookie": this.cookie || "uin=0",
-    };
-  }
-
   async search(keyword: string, limit = 10): Promise<Song[]> {
-    try {
-      const body = JSON.stringify({
-        req_0: {
-          module: "music.search.SearchCgiService",
-          method: "DoSearchForQQMusicDesktop",
-          param: { num_per_page: limit, page_num: 1, query: keyword, search_type: 0 },
-        },
-      });
-      const res = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
-        method: "POST",
-        headers: { ...this.headers, "Content-Type": "application/json" },
-        body,
-      });
-      const data: any = await res.json();
-      const list = data?.req_0?.data?.body?.song?.list ?? [];
-
-      return list.map((raw: any) => ({
-        id: raw.mid ?? raw.songmid ?? "",
-        title: raw.name ?? raw.songname ?? raw.title ?? "",
-        artist: (raw.singer ?? []).map((s: any) => s.name).join(", ") ?? raw.artist ?? "",
-        album: raw.album?.name ?? raw.albumname ?? "",
-        coverUrl: raw.album?.mid
-          ? `https://y.qq.com/music/photo_new/T002R300x300M000${raw.album.mid}.jpg`
-          : "",
-        durationMs: (raw.interval ?? 0) * 1000,
-      }));
-    } catch (e: any) {
-      console.error("[music] search failed:", e.message);
-      return [];
-    }
+    const data = await callBridge("search", keyword, limit);
+    if (!data || !Array.isArray(data)) return [];
+    return data.map((raw: any) => ({
+      id: raw.mid ?? "",
+      title: raw.title ?? "",
+      artist: raw.artist ?? "",
+      album: "",
+      coverUrl: raw.cover ?? "",
+      durationMs: raw.duration ?? 0,
+    }));
   }
 
   async getSongUrl(songId: string): Promise<SongUrlResult> {
-    try {
-      const body = JSON.stringify({
-        req_0: {
-          module: "music.vkey.GetVkey",
-          method: "CgiGetVkey",
-          param: { guid: "10000", songmid: [songId], songtype: [0], uin: "0", platform: "20" },
-        },
-      });
-      const res = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
-        method: "POST",
-        headers: { ...this.headers, "Content-Type": "application/json" },
-        body,
-      });
-      const data: any = await res.json();
-      const midInfo = data?.req_0?.data?.midurlinfo?.[0];
-      const sip = data?.req_0?.data?.sip ?? [];
-
-      if (midInfo?.purl && midInfo.purl !== "") {
-        return {
-          url: `${sip[0] ?? "http://ws.stream.qqmusic.qq.com"}${midInfo.purl}`,
-          br: 320,
-        };
-      }
-      return { url: "/static/music/demo.wav", br: 128 };
-    } catch (e: any) {
-      console.error("[music] getSongUrl failed:", e.message);
-      return { url: "/static/music/demo.wav", br: 128 };
+    const map = await callBridge("url", songId);
+    if (map && map[songId]) {
+      return { url: map[songId], br: 320 };
     }
+    return { url: "/static/music/demo.wav", br: 128 };
   }
 
-  async getLyric(songId: string): Promise<LyricResult> {
-    try {
-      const body = JSON.stringify({
-        req_0: {
-          module: "music.musichallSong.LyricInter",
-          method: "GetLyric",
-          param: { songmid: songId, platform: "yqq" },
-        },
-      });
-      const res = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
-        method: "POST",
-        headers: { ...this.headers, "Content-Type": "application/json" },
-        body,
-      });
-      const data: any = await res.json();
-      const lyric = data?.req_0?.data?.lyric ?? "";
-      const trans = data?.req_0?.data?.trans ?? "";
-      return { lrc: lyric, tlyric: trans };
-    } catch (e: any) {
-      console.error("[music] getLyric failed:", e.message);
-      return { lrc: "[00:00.00]暂无歌词" };
-    }
+  async getLyric(_songId: string): Promise<LyricResult> {
+    return { lrc: "[00:00.00]暂无歌词" };
   }
 }
