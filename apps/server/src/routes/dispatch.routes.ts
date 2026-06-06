@@ -95,9 +95,7 @@ function initServicesForDispatch(userId?: number) {
     model: process.env.DOUBAO_MODEL || "doubao-lite-128k",
   });
 
-  const musicService = process.env.QQ_MUSIC_COOKIE
-    ? new QQMusicService(process.env.QQ_MUSIC_COOKIE)
-    : new MockMusicService();
+  const musicService = new QQMusicService(process.env.QQ_MUSIC_COOKIE || "");
 
   return { contextService, llmService, musicService, memoryWriter };
 }

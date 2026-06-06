@@ -10,3 +10,6 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+data/qq_qrcode.png
+data/qq_credential.json
+apps/tts/outputs/
