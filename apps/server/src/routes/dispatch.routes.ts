@@ -4,6 +4,7 @@
 // 第3层：自然语言 → LLM 流式生成
 
 import { Router, Request, Response } from "express";
+import path from "path";
 import { getDb } from "../db/init";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 
@@ -15,8 +16,42 @@ import { createCalendarService } from "../services/calendar.service";
 import { createMemoryWriter } from "../services/memory-writer";
 import { MockMusicService, QQMusicService } from "../services/music.service";
 import { enrichItems } from "../services/plan-enrich";
+import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
 
 export const dispatchRoutes = Router();
+
+// TTS 调用函数
+async function callTTS(text: string, voiceStyle: string): Promise<string> {
+  const TTS_SERVICE_URL = process.env.TTS_SERVICE_URL || "http://127.0.0.1:8008";
+
+  try {
+    const response = await fetch(`${TTS_SERVICE_URL}/synthesize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice: voiceStyle }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`TTS 服务返回错误: ${response.status}`);
+    }
+
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const filename = `tts_${uuidv4().slice(0, 8)}.wav`;
+    const outputPath = path.resolve(__dirname, "../../../tts/outputs", filename);
+
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(outputPath, audioBuffer);
+    return `/static/${filename}`;
+  } catch (err: any) {
+    console.error("[tts] 调用失败:", err.message);
+    return "";
+  }
+}
 
 // ── 第1层：指令匹配正则 ──
 const COMMAND_PATTERNS = [
@@ -95,9 +130,7 @@ function initServicesForDispatch(userId?: number) {
     model: process.env.DOUBAO_MODEL || "doubao-lite-128k",
   });
 
-  const musicService = process.env.QQ_MUSIC_COOKIE
-    ? new QQMusicService(process.env.QQ_MUSIC_COOKIE)
-    : new MockMusicService();
+  const musicService = new QQMusicService(process.env.QQ_MUSIC_COOKIE || "");
 
   return { contextService, llmService, musicService, memoryWriter };
 }
@@ -180,17 +213,36 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
     const context = await contextService.build(message);
 
     // 流式调用 LLM
+    let jsonStarted = false;
     const plan = await llmService.generatePlanStream(
       "manual",
       message,
       context,
       (chunk: string) => {
-        sendEvent("chunk", chunk);
+        // 过滤掉 chunk 中的 JSON 代码块，只推纯文本部分
+        if (!jsonStarted) {
+          let text = chunk;
+          for (const marker of ["```json", "```", '{"summary"', '{"scene"']) {
+            const idx = text.indexOf(marker);
+            if (idx >= 0) {
+              jsonStarted = true;
+              text = text.substring(0, idx);
+              break;
+            }
+          }
+          if (text.trim()) sendEvent("chunk", text);
+        }
       }
     );
 
-    // 增强 items
-    const enrichedItems = await enrichItems(plan.items, { musicService });
+    // 增强 items（补全歌曲信息 + TTS 合成）
+    const voiceStyle = req.body.voice || "gentle_female";
+    const enrichedItems = await enrichItems(plan.items, {
+      musicService,
+      ttsService: {
+        synthesize: (text: string, voice?: string) => callTTS(text, voice || voiceStyle),
+      },
+    });
 
     // 处理 memory
     if (plan.memory && plan.memory.length > 0) {

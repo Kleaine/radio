@@ -1,29 +1,62 @@
-// music.service.ts — QQ音乐服务（Mock + 真实 双实现）
+// music.service.ts — QQ音乐服务（Mock + Python 桥接 双实现）
 
+import { execFile } from "child_process";
+import path from "path";
 import type { MusicService, Song, SongUrlResult, LyricResult } from "../interface/music.service.interface";
+
+const BRIDGE = path.resolve(__dirname, "..", "..", "..", "..", "data", "qq_bridge.py");
+// 按优先级尝试找 Python（先读环境变量，再试常见路径，最后 fallback 到 python 命令）
+const PYTHON_PATHS = [
+  process.env.PYTHON_PATH,
+  "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+  "python3",
+  "python",
+].filter(Boolean) as string[];
+
+let _pythonPath: string | null = null;
+async function findPython(): Promise<string> {
+  if (_pythonPath) return _pythonPath;
+  for (const p of PYTHON_PATHS) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        execFile(p, ["--version"], { timeout: 5000 }, (err) => err ? reject(err) : resolve());
+      });
+      _pythonPath = p;
+      return p;
+    } catch {}
+  }
+  return "python"; // fallback
+}
+
+async function callBridge(subcmd: string, arg: string, limit?: number): Promise<any> {
+  const python = await findPython();
+  return new Promise((resolve) => {
+    const args = limit ? [BRIDGE, subcmd, arg, String(limit)] : [BRIDGE, subcmd, arg];
+    execFile(python, args, { maxBuffer: 2 * 1024 * 1024, timeout: 60000, env: { ...process.env, PYTHONIOENCODING: "utf-8" } }, (err, stdout) => {
+      if (err) { console.error("[bridge] execFile error:", err.message); resolve(null); return; }
+      try { resolve(JSON.parse(stdout)); } catch (e) { console.error("[bridge] JSON parse error:", String(e)); resolve(null); }
+    });
+  });
+}
 
 // ── Mock 实现 ──
 
 export class MockMusicService implements MusicService {
+  private mockArtists = ["周杰伦", "林俊杰", "陈奕迅", "邓紫棋", "陈绮贞", "陶喆", "方大同", "孙燕姿", "五月天", "蔡健雅"];
+
   async search(keyword: string, limit = 10): Promise<Song[]> {
-    const results: Song[] = [];
-    const count = Math.min(limit, 5);
-    const mockArtists = ["周杰伦", "林俊杰", "陈奕迅", "邓紫棋", "陈绮贞"];
-    for (let i = 0; i < count; i++) {
-      results.push({
-        id: `mock_${i}`,
-        title: `${keyword} - 歌曲${i + 1}`,
-        artist: mockArtists[i % mockArtists.length],
-        album: `Mock 专辑${i + 1}`,
-        coverUrl: "",
-        durationMs: 200000 + i * 30000,
-      });
-    }
-    return results;
+    return Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
+      id: `mock_${i}`,
+      title: `${keyword} - 歌曲${i + 1}`,
+      artist: this.mockArtists[i % this.mockArtists.length],
+      album: `Mock 专辑${i + 1}`,
+      coverUrl: "",
+      durationMs: 200000 + i * 30000,
+    }));
   }
 
   async getSongUrl(_songId: string): Promise<SongUrlResult> {
-    return { url: null, br: 128 };
+    return { url: "/static/music/demo.wav", br: 128 };
   }
 
   async getLyric(_songId: string): Promise<LyricResult> {
@@ -31,79 +64,41 @@ export class MockMusicService implements MusicService {
   }
 }
 
-// ── 真实实现：QQ 音乐 npm 包 ──
+// ── 真实实现：Python 桥接到 qqmusic_api（扫码登录后可用）──
 
 export class QQMusicService implements MusicService {
-  private qqMusic: any = null;
-  private ready = false;
-
-  constructor(private cookie: string) {}
-
-  private async ensureReady() {
-    if (this.ready) return;
-    try {
-      const mod = await import("qq-music-api");
-      this.qqMusic = mod.default ?? mod;
-      if (this.cookie) {
-        this.qqMusic.setCookie(this.cookie);
-      }
-      this.ready = true;
-    } catch (e: any) {
-      console.warn("[music] qq-music-api 未安装，使用 Mock 模式。npm install qq-music-api");
-      throw e;
-    }
-  }
+  private urlCache: Map<string, string> = new Map();
 
   async search(keyword: string, limit = 10): Promise<Song[]> {
-    try {
-      await this.ensureReady();
-      const data = await this.qqMusic.api("search", {
-        key: keyword,
-        pageNo: 1,
-        pageSize: limit,
-        t: 0, // 单曲
-      });
-      const list = data?.list ?? data?.data?.list ?? data?.result?.list ?? [];
-      return list.map((raw: any) => ({
-        id: raw.songmid ?? raw.id ?? String(raw.songid ?? ""),
-        title: raw.songname ?? raw.name ?? raw.title ?? "",
-        artist: raw.singer?.map?.((s: any) => s.name).join(", ") ?? raw.artist ?? "",
-        album: raw.albumname ?? raw.album ?? "",
-        coverUrl: raw.cover ?? raw.picUrl ?? raw.albummid
-          ? `https://y.qq.com/music/photo_new/T002R300x300M000${raw.albummid}.jpg`
-          : "",
-        durationMs: (raw.interval ?? raw.duration ?? 0) * 1000,
-      }));
-    } catch (e: any) {
-      console.error("[music] search failed:", e.message);
-      return [];
-    }
+    const data = await callBridge("search", keyword, limit);
+    if (!data || !Array.isArray(data)) return [];
+    return data.map((raw: any) => {
+      if (raw.url) this.urlCache.set(raw.mid, raw.url);
+      return {
+        id: raw.mid ?? "",
+        title: raw.title ?? "",
+        artist: raw.artist ?? "",
+        album: "",
+        coverUrl: raw.cover ?? "",
+        durationMs: raw.duration ?? 0,
+      };
+    });
   }
 
   async getSongUrl(songId: string): Promise<SongUrlResult> {
-    try {
-      await this.ensureReady();
-      const data = await this.qqMusic.api("song/url", { id: songId });
-      const url = data?.data?.[songId] ?? data?.url ?? data?.data?.url ?? null;
-      return { url, br: 320 };
-    } catch (e: any) {
-      console.error("[music] getSongUrl failed:", e.message);
-      return { url: null, br: 128 };
+    // 先从缓存取（search 时已拿到 URL）
+    if (this.urlCache.has(songId)) {
+      return { url: this.urlCache.get(songId)!, br: 320 };
     }
+    // 缓存没有再去 bridge 查
+    const map = await callBridge("url", songId);
+    if (map && map[songId]) {
+      return { url: map[songId], br: 320 };
+    }
+    return { url: "/static/music/demo.wav", br: 128 };
   }
 
-  async getLyric(songId: string): Promise<LyricResult> {
-    try {
-      await this.ensureReady();
-      const data = await this.qqMusic.api("lyric", { songmid: songId });
-      return {
-        lrc: data?.lyric ?? data?.lrc?.lyric ?? "[00:00.00]暂无歌词",
-        tlyric: data?.tlyric?.lyric,
-        yrc: data?.yrc?.lyric,
-      };
-    } catch (e: any) {
-      console.error("[music] getLyric failed:", e.message);
-      return { lrc: "[00:00.00]暂无歌词" };
-    }
+  async getLyric(_songId: string): Promise<LyricResult> {
+    return { lrc: "[00:00.00]暂无歌词" };
   }
 }

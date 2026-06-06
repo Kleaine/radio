@@ -1,6 +1,11 @@
 // index.ts — AI DJ 后端服务入口
 // Express + TypeScript + SQLite
 
+// 全局兜底：防止第三方包内部未处理异常导致进程崩溃
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+
 import dotenv from "dotenv";
 import path from "path";
 
@@ -39,6 +44,7 @@ app.use(express.urlencoded({ extended: true }));
 // 静态文件（TTS 音频、音乐文件）
 app.use("/static", express.static(path.resolve(__dirname, "../../tts/outputs")));
 app.use("/static/music", express.static(path.resolve(__dirname, "../../../data/music")));
+app.use(express.static(path.resolve(__dirname, "../../web")));
 
 // 统一响应封装
 app.use(responseWrapper);

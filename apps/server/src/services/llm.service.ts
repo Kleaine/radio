@@ -162,7 +162,7 @@ async function callDoubaoStream(
       ],
       stream: true,
       max_tokens: 4096,
-      temperature: 0.8,
+      temperature: 0.7,
     }, { signal: controller.signal });
 
     let fullText = "";
@@ -202,7 +202,7 @@ async function callDoubao(
       ],
       stream: false,
       max_tokens: 4096,
-      temperature: 0.8,
+      temperature: 0.7,
     }, { signal: controller.signal });
 
     return completion.choices?.[0]?.message?.content ?? "";
@@ -255,7 +255,7 @@ export function createLlmService(config: LlmConfig): LlmService {
       const json = extractJson(fullText);
       if (json) return parsePlan(json);
 
-      console.warn("[llm] 播报计划 JSON 提取失败");
+      console.warn("[llm] 播报计划 JSON 提取失败，模型输出末尾:", fullText.slice(-300));
       return fallbackPlan();
     } catch (e: any) {
       console.error("[llm] 播报计划流式生成失败:", e.message);
@@ -283,7 +283,7 @@ export function createLlmService(config: LlmConfig): LlmService {
       const json = extractJson(fullText);
       if (json) return parsePlan(json);
 
-      console.warn("[llm] 播报计划 JSON 提取失败");
+      console.warn("[llm] 播报计划 JSON 提取失败，模型输出末尾:", fullText.slice(-300));
       return fallbackPlan();
     } catch (e: any) {
       console.error("[llm] 播报计划生成失败:", e.message);

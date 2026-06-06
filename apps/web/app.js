@@ -467,6 +467,13 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.type === 'tts') {
+                // 跳过第一段 tts 开场白（流式推送时已显示）
+                if (i === 0) {
+                    if (item.ttsAudioUrl) {
+                        await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+                    }
+                    continue;
+                }
                 const ttsDiv = document.createElement('div');
                 ttsDiv.className = 'tts-card';
                 ttsDiv.textContent = item.text || '';
