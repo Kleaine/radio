@@ -4,6 +4,7 @@
 // 第3层：自然语言 → LLM 流式生成
 
 import { Router, Request, Response } from "express";
+import path from "path";
 import { getDb } from "../db/init";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
 
@@ -15,8 +16,42 @@ import { createCalendarService } from "../services/calendar.service";
 import { createMemoryWriter } from "../services/memory-writer";
 import { MockMusicService, QQMusicService } from "../services/music.service";
 import { enrichItems } from "../services/plan-enrich";
+import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
 
 export const dispatchRoutes = Router();
+
+// TTS 调用函数
+async function callTTS(text: string, voiceStyle: string): Promise<string> {
+  const TTS_SERVICE_URL = process.env.TTS_SERVICE_URL || "http://127.0.0.1:8000";
+
+  try {
+    const response = await fetch(`${TTS_SERVICE_URL}/synthesize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice: voiceStyle }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`TTS 服务返回错误: ${response.status}`);
+    }
+
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    const filename = `tts_${uuidv4().slice(0, 8)}.wav`;
+    const outputPath = path.resolve(__dirname, "../../../tts/outputs", filename);
+
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    fs.writeFileSync(outputPath, audioBuffer);
+    return `/static/${filename}`;
+  } catch (err: any) {
+    console.error("[tts] 调用失败:", err.message);
+    return "";
+  }
+}
 
 // ── 第1层：指令匹配正则 ──
 const COMMAND_PATTERNS = [
@@ -202,8 +237,14 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       }
     );
 
-    // 增强 items
-    const enrichedItems = await enrichItems(plan.items, { musicService });
+    // 增强 items（补全歌曲信息 + TTS 合成）
+    const voiceStyle = req.body.voice || "gentle_female";
+    const enrichedItems = await enrichItems(plan.items, {
+      musicService,
+      ttsService: {
+        synthesize: (text: string, voice?: string) => callTTS(text, voice || voiceStyle),
+      },
+    });
 
     // 处理 memory
     if (plan.memory && plan.memory.length > 0) {
