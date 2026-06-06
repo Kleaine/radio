@@ -15,8 +15,8 @@ export interface ContextConfig {
   recentSkips?: string[];
   /** 常听歌手 Top 10 */
   topArtists?: string[];
-  /** AI 最近的回复摘要，避免重复 */
-  aiMemory?: string[];
+  /** AI 上一次说的所有串词文本，避免重复 */
+  lastAiOpening?: string;
 }
 
 export interface ContextService {
@@ -96,9 +96,9 @@ export function createContextService(config: ContextConfig): ContextService {
         parts.push(`用户常听歌手：${config.topArtists.join("、")}`);
       }
 
-      // AI 最近的回复——避免重复话题
-      if (config.aiMemory?.length) {
-        parts.push(`你最近几次的回复摘要（不要重复这些内容）：${config.aiMemory.join("；")}`);
+      // AI 上一次说的所有话——看了就知道别再重复
+      if (config.lastAiOpening) {
+        parts.push(`你上一次的回复全文（仔细看，别在开场白里重复同样的天气、温度、话题）：${config.lastAiOpening}`);
       }
 
       // 最近播放——避免重复推荐

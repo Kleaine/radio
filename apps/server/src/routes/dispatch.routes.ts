@@ -90,13 +90,11 @@ function matchSearch(message: string): string | null {
   return null;
 }
 
-// AI 记忆：记录最近几次的回复摘要，避免重复
-const aiRecentMemory: string[] = [];
-const AI_MEMORY_MAX = 5;
+// AI 记忆：记录上一次的完整开场白，下次对话时让 LLM 知道自己说过什么
+let lastAiOpening: string = "";
 
-function addAiMemory(summary: string) {
-  aiRecentMemory.push(summary);
-  if (aiRecentMemory.length > AI_MEMORY_MAX) aiRecentMemory.shift();
+function setLastAiOpening(opening: string) {
+  lastAiOpening = opening;
 }
 
 // 懒加载单例 — 首次请求时初始化，之后复用
@@ -171,7 +169,7 @@ function buildContextForUser(userId: number | undefined) {
     recentPlays,
     recentSkips,
     topArtists,
-    aiMemory: aiRecentMemory,
+    lastAiOpening,
   });
 }
 
@@ -323,8 +321,12 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       items: enrichedItems,
     }));
 
-    // 记录 AI 回复摘要，下次对话时避免重复话题
-    addAiMemory(plan.summary);
+    // 记录 AI 说了什么，下次对话时避免重复
+    const allTtsTexts = plan.items
+      .filter(i => i.type === "tts" && i.text)
+      .map(i => i.text!)
+      .join(" | ");
+    setLastAiOpening(allTtsTexts);
   } catch (err: any) {
     console.error("[dispatch] LLM 处理失败:", err.message);
     sendEvent("done", JSON.stringify({
