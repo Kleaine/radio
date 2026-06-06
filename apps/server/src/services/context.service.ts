@@ -29,7 +29,7 @@ export function createContextService(config: ContextConfig): ContextService {
   async function getWeatherText(): Promise<string> {
     try {
       const w: WeatherData = await weatherService.getCurrent();
-      return `${w.description}，约${w.temp}度（仅供参考，不需要每次都提天气）`;
+      return `${w.description}（不要报温度数字）`;
     } catch {
       return "";
     }
