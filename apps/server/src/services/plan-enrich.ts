@@ -69,18 +69,19 @@ export async function enrichItems(
       const normalize = (s: string) => s.replace(/[（(]/g, '(').replace(/[）)]/g, ')').toLowerCase();
       const normTitle = normalize(title);
       const artistLower = artist.toLowerCase();
-      const exactMatch = allSongs.find(s => {
+      // 歌名+歌手都对 → 优先取非live版，没有就取live版（翻唱也是正版）
+      const exactMatches = allSongs.filter(s => {
         const nt = normalize(s.title);
-        return !badPattern.test(s.title) &&
-          (nt.includes(normTitle) || normTitle.includes(nt)) &&
+        return (nt.includes(normTitle) || normTitle.includes(nt)) &&
           (!artistLower || s.artist.toLowerCase().includes(artistLower) || artistLower.includes(s.artist.toLowerCase()));
       });
-      // 歌手匹配但歌名不对的不要——搜"借过一下"不能返回"红颜"
-      const titleMatch = allSongs.find(s => {
+      const exactMatch = exactMatches.find(s => !badPattern.test(s.title)) ?? exactMatches[0] ?? null;
+      // 只匹配歌名
+      const titleMatches = allSongs.filter(s => {
         const nt = normalize(s.title);
-        return !badPattern.test(s.title) &&
-          (nt.includes(normTitle) || normTitle.includes(nt));
+        return (nt.includes(normTitle) || normTitle.includes(nt));
       });
+      const titleMatch = titleMatches.find(s => !badPattern.test(s.title)) ?? titleMatches[0] ?? null;
       const song = exactMatch ?? titleMatch ?? null;
       // 搜不到确切匹配就不强行匹配，保留原始搜索信息让用户知道没找到
       if (song) {
