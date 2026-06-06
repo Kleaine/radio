@@ -67,20 +67,30 @@ export class MockMusicService implements MusicService {
 // ── 真实实现：Python 桥接到 qqmusic_api（扫码登录后可用）──
 
 export class QQMusicService implements MusicService {
+  private urlCache: Map<string, string> = new Map();
+
   async search(keyword: string, limit = 10): Promise<Song[]> {
     const data = await callBridge("search", keyword, limit);
     if (!data || !Array.isArray(data)) return [];
-    return data.map((raw: any) => ({
-      id: raw.mid ?? "",
-      title: raw.title ?? "",
-      artist: raw.artist ?? "",
-      album: "",
-      coverUrl: raw.cover ?? "",
-      durationMs: raw.duration ?? 0,
-    }));
+    return data.map((raw: any) => {
+      if (raw.url) this.urlCache.set(raw.mid, raw.url);
+      return {
+        id: raw.mid ?? "",
+        title: raw.title ?? "",
+        artist: raw.artist ?? "",
+        album: "",
+        coverUrl: raw.cover ?? "",
+        durationMs: raw.duration ?? 0,
+      };
+    });
   }
 
   async getSongUrl(songId: string): Promise<SongUrlResult> {
+    // 先从缓存取（search 时已拿到 URL）
+    if (this.urlCache.has(songId)) {
+      return { url: this.urlCache.get(songId)!, br: 320 };
+    }
+    // 缓存没有再去 bridge 查
     const map = await callBridge("url", songId);
     if (map && map[songId]) {
       return { url: map[songId], br: 320 };
