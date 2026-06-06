@@ -75,8 +75,14 @@ export async function enrichItems(
           (nt.includes(normTitle) || normTitle.includes(nt)) &&
           (!artistLower || s.artist.toLowerCase().includes(artistLower) || artistLower.includes(s.artist.toLowerCase()));
       });
-      const studioSong = exactMatch ?? allSongs.find(s => !badPattern.test(s.title) && (!artistLower || s.artist.toLowerCase().includes(artistLower)));
-      const song = studioSong ?? allSongs.find(s => !badPattern.test(s.title)) ?? allSongs[0];
+      // 歌手匹配但歌名不对的不要——搜"借过一下"不能返回"红颜"
+      const titleMatch = allSongs.find(s => {
+        const nt = normalize(s.title);
+        return !badPattern.test(s.title) &&
+          (nt.includes(normTitle) || normTitle.includes(nt));
+      });
+      const song = exactMatch ?? titleMatch ?? null;
+      // 搜不到确切匹配就不强行匹配，保留原始搜索信息让用户知道没找到
       if (song) {
         // 播放链接懒加载：不在这里取 URL，点播放时走 /api/audio?mid=xxx 代理
         return {
