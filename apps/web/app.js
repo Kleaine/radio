@@ -497,6 +497,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.type === 'tts' && item.ttsAudioUrl) {
                 await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
             } else if (item.type === 'song' && item.audioUrl) {
+                // 上报播放记录，用于防重复
+                fetch('/api/player/report-play', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
+                }).catch(() => {});
                 await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
             }
         }
@@ -555,6 +561,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (url) {
             audioPlayer.src = url;
             audioPlayer.play().catch(() => {});
+            // 上报播放记录
+            const card = btn.closest('.song-card');
+            const titleEl = card?.querySelector('.title');
+            const artistEl = card?.querySelector('.artist');
+            if (titleEl) {
+                fetch('/api/player/report-play', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: titleEl.textContent, artist: artistEl?.textContent || '' })
+                }).catch(() => {});
+            }
         }
     });
 
