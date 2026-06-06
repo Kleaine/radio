@@ -48,7 +48,7 @@ morning | coding | relax | workout | sleep | focus | party | commute | rainy | d
 
 ### items（必填）
 - 电台节目的**顺序序列**。type 取 `"song"`（歌曲）或 `"tts"`（DJ 说话）
-- song 项：`title` 和 `artist` 必须精确到能被 QQ 音乐搜索匹配，`reason` 写选曲理由
+- song 项：`title` 和 `artist` 必须使用 QQ 音乐上的**标准名称**，禁止音译、意译或自行翻译。例如 "Susan说" 不能写成 "苏三说"，"Uptown Funk" 不能写成 "上城放克"。`reason` 写选曲理由
 - tts 项：`text` 是 DJ 语音播报的文本，会被 TTS 合成为语音。每段 40-80 字。`voice` 可选，选播报音色：
   - `gentle_female`：温柔女声，适合早安/晚安/治愈场景
   - `lively_female`：活泼女声，适合推荐歌曲/轻快互动
