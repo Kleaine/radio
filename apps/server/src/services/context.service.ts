@@ -73,8 +73,11 @@ export function createContextService(config: ContextConfig): ContextService {
         hour12: false,
       });
 
+      const hour = now.getHours();
+      const timeHint = hour < 6 ? "凌晨" : hour < 9 ? "早晨" : hour < 12 ? "上午" : hour < 14 ? "中午" : hour < 18 ? "下午" : hour < 22 ? "晚上" : "深夜";
+
       const parts: string[] = [];
-      parts.push(`当前时间：${timeStr}`);
+      parts.push(`当前时间：${timeStr}（${timeHint}）`);
 
       // 天气
       const weather = await getWeatherText();
