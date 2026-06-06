@@ -16,6 +16,7 @@ import { createCalendarService } from "../services/calendar.service";
 import { createMemoryWriter } from "../services/memory-writer";
 import { MockMusicService, QQMusicService } from "../services/music.service";
 import { enrichItems } from "../services/plan-enrich";
+import { preWarmUrls } from "./audio.routes";
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 
@@ -89,50 +90,89 @@ function matchSearch(message: string): string | null {
   return null;
 }
 
-// 初始化 services
-function initServicesForDispatch(userId?: number) {
-  const weatherService = createWeatherService({
-    openWeatherApiKey: process.env.OPENWEATHER_API_KEY,
-    city: process.env.CITY || "Beijing",
-  });
+// AI 记忆：记录最近几次的回复摘要，避免重复
+const aiRecentMemory: string[] = [];
+const AI_MEMORY_MAX = 5;
 
-  const calendarService = createCalendarService();
-  const memoryWriter = createMemoryWriter();
+function addAiMemory(summary: string) {
+  aiRecentMemory.push(summary);
+  if (aiRecentMemory.length > AI_MEMORY_MAX) aiRecentMemory.shift();
+}
 
-  let recentPlays: string[] = [];
+// 懒加载单例 — 首次请求时初始化，之后复用
+// 不能放在模块顶层，因为 dotenv 尚未加载
+let _weatherService: ReturnType<typeof createWeatherService> | null = null;
+let _calendarService: ReturnType<typeof createCalendarService> | null = null;
+let _memoryWriter: ReturnType<typeof createMemoryWriter> | null = null;
+let _llmService: ReturnType<typeof createLlmService> | null = null;
+let _musicService: QQMusicService | null = null;
+
+function getWeatherService() {
+  if (!_weatherService) {
+    _weatherService = createWeatherService({
+      openWeatherApiKey: process.env.OPENWEATHER_API_KEY,
+      city: process.env.CITY || "Beijing",
+    });
+  }
+  return _weatherService;
+}
+function getCalendarService() {
+  if (!_calendarService) _calendarService = createCalendarService();
+  return _calendarService;
+}
+function getMemoryWriter() {
+  if (!_memoryWriter) _memoryWriter = createMemoryWriter();
+  return _memoryWriter;
+}
+function getLlmService() {
+  if (!_llmService) {
+    _llmService = createLlmService({
+      apiKey: process.env.DOUBAO_API_KEY || "",
+      model: process.env.DOUBAO_MODEL || "doubao-lite-128k",
+    });
+  }
+  return _llmService;
+}
+function getMusicService() {
+  if (!_musicService) _musicService = new QQMusicService(process.env.QQ_MUSIC_COOKIE || "");
+  return _musicService;
+}
+
+function buildContextForUser(userId: number | undefined) {
+  let recentPlays: Array<{ title: string; artist: string }> = [];
   let recentSkips: string[] = [];
+  let topArtists: string[] = [];
 
   if (userId) {
     const db = getDb();
     recentPlays = db.prepare(`
-      SELECT song_title FROM plays
+      SELECT song_title, artist FROM plays
       WHERE user_id = ? AND skipped = 0
-      ORDER BY played_at DESC LIMIT 10
-    `).all(userId).map((r: any) => r.song_title);
+      ORDER BY played_at DESC LIMIT 25
+    `).all(userId).map((r: any) => ({ title: r.song_title, artist: r.artist }));
 
     recentSkips = db.prepare(`
       SELECT song_title FROM plays
       WHERE user_id = ? AND skipped = 1
       ORDER BY played_at DESC LIMIT 5
     `).all(userId).map((r: any) => r.song_title);
+
+    topArtists = db.prepare(`
+      SELECT artist, COUNT(*) as cnt FROM plays
+      WHERE user_id = ? AND skipped = 0 AND artist != ''
+      GROUP BY artist ORDER BY cnt DESC LIMIT 10
+    `).all(userId).map((r: any) => r.artist);
   }
 
-  const contextService = createContextService({
-    weatherService,
-    calendarService,
-    memoryWriter,
+  return createContextService({
+    weatherService: getWeatherService(),
+    calendarService: getCalendarService(),
+    memoryWriter: getMemoryWriter(),
     recentPlays,
     recentSkips,
+    topArtists,
+    aiMemory: aiRecentMemory,
   });
-
-  const llmService = createLlmService({
-    apiKey: process.env.DOUBAO_API_KEY || "",
-    model: process.env.DOUBAO_MODEL || "doubao-lite-128k",
-  });
-
-  const musicService = new QQMusicService(process.env.QQ_MUSIC_COOKIE || "");
-
-  return { contextService, llmService, musicService, memoryWriter };
 }
 
 // ── POST /api/dispatch ──
@@ -177,10 +217,8 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
   const searchKeyword = matchSearch(message);
   console.log("[dispatch] 搜索匹配结果:", searchKeyword);
   if (searchKeyword) {
-    const { musicService } = initServicesForDispatch();
-
     try {
-      const songs = await musicService.search(searchKeyword, 10);
+      const songs = await getMusicService().search(searchKeyword, 10);
       sendEvent("done", JSON.stringify({
         type: "search",
         keyword: searchKeyword,
@@ -206,20 +244,22 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
 
   // 第3层：自然语言 → LLM
   const userId = (req as AuthRequest).userId;
-  const { contextService, llmService, musicService, memoryWriter } = initServicesForDispatch(userId);
+  const contextService = buildContextForUser(userId);
 
   try {
-    // 组装上下文
+    // 立即告知前端正在处理（模仿 Claude Code 的即时反馈）
+    sendEvent("status", "DJ 正在为您准备...");
+
+    // 组装上下文（天气走缓存，首次调用后不再阻塞）
     const context = await contextService.build(message);
 
     // 流式调用 LLM
     let jsonStarted = false;
-    const plan = await llmService.generatePlanStream(
+    const plan = await getLlmService().generatePlanStream(
       "manual",
       message,
       context,
       (chunk: string) => {
-        // 过滤掉 chunk 中的 JSON 代码块，只推纯文本部分
         if (!jsonStarted) {
           let text = chunk;
           for (const marker of ["```json", "```"]) {
@@ -235,24 +275,31 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       }
     );
 
-    // 增强 items（补全歌曲信息 + TTS 合成）
+    // 增强 items（TTS 合成 + 搜歌 ID/封面，播放链接走 /api/audio 懒加载）
     const voiceStyle = req.body.voice || "gentle_female";
     const enrichedItems = await enrichItems(plan.items, {
-      musicService,
+      musicService: getMusicService(),
       ttsService: {
         synthesize: (text: string, voice?: string) => callTTS(text, voice || voiceStyle),
       },
     });
 
+    // 后台预缓存所有歌曲的播放链接，点播时秒出
+    const songMids = enrichedItems
+      .filter(i => i.type === "song" && i.songId)
+      .map(i => i.songId!);
+    if (songMids.length > 0) {
+      preWarmUrls(songMids).catch(err => console.error("[dispatch] 预缓存失败:", err));
+    }
+
     // 处理 memory
     if (plan.memory && plan.memory.length > 0) {
-      memoryWriter.writeAll(plan.memory);
+      getMemoryWriter().writeAll(plan.memory);
     }
 
     // 处理 schedule
     if (plan.schedule && plan.schedule.length > 0) {
-      const calendarService = createCalendarService();
-      await calendarService.updateEvents(plan.schedule);
+      await getCalendarService().updateEvents(plan.schedule);
     }
 
     // 记录播放历史
@@ -275,6 +322,9 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       scene: plan.scene,
       items: enrichedItems,
     }));
+
+    // 记录 AI 回复摘要，下次对话时避免重复话题
+    addAiMemory(plan.summary);
   } catch (err: any) {
     console.error("[dispatch] LLM 处理失败:", err.message);
     sendEvent("done", JSON.stringify({

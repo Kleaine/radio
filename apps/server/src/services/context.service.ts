@@ -9,10 +9,14 @@ export interface ContextConfig {
   weatherService: WeatherService;
   calendarService: CalendarService;
   memoryWriter: MemoryWriter;
-  /** 最近播放记录，由后端 DB 提供 */
-  recentPlays?: string[];
+  /** 最近播放记录（歌名+歌手），由后端 DB 提供 */
+  recentPlays?: Array<{ title: string; artist: string }>;
   /** 最近跳过的歌 */
   recentSkips?: string[];
+  /** 常听歌手 Top 10 */
+  topArtists?: string[];
+  /** AI 最近的回复摘要，避免重复 */
+  aiMemory?: string[];
 }
 
 export interface ContextService {
@@ -25,7 +29,7 @@ export function createContextService(config: ContextConfig): ContextService {
   async function getWeatherText(): Promise<string> {
     try {
       const w: WeatherData = await weatherService.getCurrent();
-      return `${w.city} ${w.temp}°C ${w.description}`;
+      return `${w.description}，约${w.temp}度（仅供参考，不需要每次都提天气）`;
     } catch {
       return "";
     }
@@ -87,12 +91,23 @@ export function createContextService(config: ContextConfig): ContextService {
       const calendar = await getCalendarText();
       if (calendar) parts.push(`今日日程：${calendar}`);
 
-      // 播放历史
+      // 常听歌手（口味画像）
+      if (config.topArtists?.length) {
+        parts.push(`用户常听歌手：${config.topArtists.join("、")}`);
+      }
+
+      // AI 最近的回复——避免重复话题
+      if (config.aiMemory?.length) {
+        parts.push(`你最近几次的回复摘要（不要重复这些内容）：${config.aiMemory.join("；")}`);
+      }
+
+      // 最近播放——避免重复推荐
       if (config.recentPlays?.length) {
-        parts.push(`最近播放：${config.recentPlays.slice(0, 10).join("、")}`);
+        const playlist = config.recentPlays.map(p => `${p.title}(${p.artist})`).join("、");
+        parts.push(`最近 25 首已听过（不要再推荐这些歌）：${playlist}`);
       }
       if (config.recentSkips?.length) {
-        parts.push(`最近跳过：${config.recentSkips.slice(0, 5).join("、")}`);
+        parts.push(`最近跳过（不要再推）：${config.recentSkips.join("、")}`);
       }
 
       // 用户画像
