@@ -1,6 +1,11 @@
 // index.ts — AI DJ 后端服务入口
 // Express + TypeScript + SQLite
 
+// 全局兜底：防止第三方包内部未处理异常导致进程崩溃
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+
 import dotenv from "dotenv";
 import path from "path";
 

@@ -180,12 +180,25 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
     const context = await contextService.build(message);
 
     // 流式调用 LLM
+    let jsonStarted = false;
     const plan = await llmService.generatePlanStream(
       "manual",
       message,
       context,
       (chunk: string) => {
-        sendEvent("chunk", chunk);
+        // 过滤掉 chunk 中的 JSON 代码块，只推纯文本部分
+        if (!jsonStarted) {
+          let text = chunk;
+          for (const marker of ["```json", "```", '{"summary"', '{"scene"']) {
+            const idx = text.indexOf(marker);
+            if (idx >= 0) {
+              jsonStarted = true;
+              text = text.substring(0, idx);
+              break;
+            }
+          }
+          if (text.trim()) sendEvent("chunk", text);
+        }
       }
     );
 
