@@ -39,6 +39,7 @@ app.use(express.urlencoded({ extended: true }));
 // 静态文件（TTS 音频、音乐文件）
 app.use("/static", express.static(path.resolve(__dirname, "../../tts/outputs")));
 app.use("/static/music", express.static(path.resolve(__dirname, "../../../data/music")));
+app.use(express.static(path.resolve(__dirname, "../../web")));
 
 // 统一响应封装
 app.use(responseWrapper);
