@@ -222,7 +222,7 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
         // 过滤掉 chunk 中的 JSON 代码块，只推纯文本部分
         if (!jsonStarted) {
           let text = chunk;
-          for (const marker of ["```json", "```", '{"summary"', '{"scene"']) {
+          for (const marker of ["```json", "```"]) {
             const idx = text.indexOf(marker);
             if (idx >= 0) {
               jsonStarted = true;
