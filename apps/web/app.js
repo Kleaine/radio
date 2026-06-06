@@ -454,34 +454,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
 
+        // 第一步：先渲染所有卡片（不等待播放）
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.type === 'tts') {
-                // 跳过第一段 tts 开场白（流式推送时已显示）
-                if (i === 0) {
-                    if (item.ttsAudioUrl) {
-                        await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
-                    }
-                    continue;
-                }
-                const ttsDiv = document.createElement('div');
-                ttsDiv.className = 'tts-card';
-                ttsDiv.textContent = item.text || '';
-                container.appendChild(ttsDiv);
-                scrollToBottom();
-
-                if (item.ttsAudioUrl) {
-                    await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
-                }
+                if (i === 0) continue; // 开场白已在流式推送时显示
+                const d = document.createElement('div');
+                d.className = 'tts-card';
+                d.textContent = item.text || '';
+                container.appendChild(d);
             } else if (item.type === 'song') {
-                const songDiv = document.createElement('div');
-                songDiv.innerHTML = renderSongCard(item);
-                container.appendChild(songDiv);
-                scrollToBottom();
+                const d = document.createElement('div');
+                d.innerHTML = renderSongCard(item);
+                container.appendChild(d);
+            }
+        }
+        scrollToBottom();
 
-                if (item.audioUrl) {
-                    await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
-                }
+        // 第二步：顺序播放
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type === 'tts' && i === 0 && item.ttsAudioUrl) {
+                await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+            } else if (item.type === 'tts' && i > 0 && item.ttsAudioUrl) {
+                await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+            } else if (item.type === 'song' && item.audioUrl) {
+                await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
             }
         }
 
