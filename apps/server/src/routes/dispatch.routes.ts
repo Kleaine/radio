@@ -23,7 +23,7 @@ export const dispatchRoutes = Router();
 
 // TTS 调用函数
 async function callTTS(text: string, voiceStyle: string): Promise<string> {
-  const TTS_SERVICE_URL = process.env.TTS_SERVICE_URL || "http://127.0.0.1:8000";
+  const TTS_SERVICE_URL = process.env.TTS_SERVICE_URL || "http://127.0.0.1:8008";
 
   try {
     const response = await fetch(`${TTS_SERVICE_URL}/synthesize`, {
