@@ -72,9 +72,7 @@ function initServices(userId: number) {
   });
 
   // 音乐服务
-  const musicService = process.env.QQ_MUSIC_COOKIE
-    ? new QQMusicService(process.env.QQ_MUSIC_COOKIE)
-    : new MockMusicService();
+  const musicService = new QQMusicService(process.env.QQ_MUSIC_COOKIE || "");
 
   return { contextService, llmService, musicService, memoryWriter };
 }
