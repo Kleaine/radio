@@ -327,6 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         recordStatus.textContent = 'AI 思考中...';
 
         appendUserMessage(text);
+        _lastUserMessage = text;
 
         // 创建系统消息气泡，用于流式追加
         const sDiv = document.createElement('div');
@@ -458,52 +459,68 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // ================= 10. PlanResponse items[] 渲染与播放队列 =================
+    let _lastUserMessage = '';
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
 
-        // 第一步：渲染。开场白(tts[0])已流式显示，跳过。
-        // 串词(中间 tts)放在下一首歌曲卡片上方。
-        let pendingTtsText = '';
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.type === 'tts') {
-                if (i === 0) continue; // 开场白，已流式显示
-                pendingTtsText = item.text || '';
-            } else if (item.type === 'song') {
-                if (pendingTtsText) {
-                    const ttsDiv = document.createElement('div');
-                    ttsDiv.className = 'tts-card';
-                    ttsDiv.textContent = pendingTtsText;
-                    container.appendChild(ttsDiv);
-                    pendingTtsText = '';
-                }
-                const d = document.createElement('div');
-                d.innerHTML = renderSongCard(item);
-                container.appendChild(d);
-            }
-        }
-        // 结尾串词（如果没有后续歌曲）
-        if (pendingTtsText) {
-            const ttsDiv = document.createElement('div');
-            ttsDiv.className = 'tts-card';
-            ttsDiv.textContent = pendingTtsText;
-            container.appendChild(ttsDiv);
-        }
-        scrollToBottom();
+        const isRecommend = /推荐/.test(_lastUserMessage);
 
-        // 第二步：按顺序自动播放。全部播完才停。
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.type === 'tts' && item.ttsAudioUrl) {
-                await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
-            } else if (item.type === 'song' && item.audioUrl) {
-                // 上报播放记录，用于防重复
-                fetch('/api/player/report-play', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
-                }).catch(() => {});
-                await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
+        if (isRecommend) {
+            // ── 推荐模式：一次性渲染所有卡片，只播开场白，用户自己选歌 ──
+            let pendingTtsText = '';
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.type === 'tts') {
+                    if (i === 0) continue;
+                    pendingTtsText = item.text || '';
+                } else if (item.type === 'song') {
+                    if (pendingTtsText) {
+                        const ttsDiv = document.createElement('div');
+                        ttsDiv.className = 'tts-card';
+                        ttsDiv.textContent = pendingTtsText;
+                        container.appendChild(ttsDiv);
+                        pendingTtsText = '';
+                    }
+                    const d = document.createElement('div');
+                    d.innerHTML = renderSongCard(item);
+                    container.appendChild(d);
+                }
+            }
+            scrollToBottom();
+            // 只播开场白
+            const firstTTS = items.find(i => i.type === 'tts' && i.ttsAudioUrl);
+            if (firstTTS) await playAudio(firstTTS.ttsAudioUrl, firstTTS.text || 'DJ 播报');
+        } else {
+            // ── 电台模式：逐首渲染，逐首播放，像真正的电台 ──
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.type === 'tts') {
+                    // 播 TTS，但第一段开场白不渲染（已流式显示）
+                    if (i > 0) {
+                        const ttsDiv = document.createElement('div');
+                        ttsDiv.className = 'tts-card';
+                        ttsDiv.textContent = item.text || '';
+                        container.appendChild(ttsDiv);
+                        scrollToBottom();
+                    }
+                    if (item.ttsAudioUrl) {
+                        await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+                    }
+                } else if (item.type === 'song') {
+                    // 渲染卡片 + 播放
+                    const d = document.createElement('div');
+                    d.innerHTML = renderSongCard(item);
+                    container.appendChild(d);
+                    scrollToBottom();
+                    if (item.audioUrl) {
+                        fetch('/api/player/report-play', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
+                        }).catch(() => {});
+                        await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
+                    }
+                }
             }
         }
 
