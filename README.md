@@ -12,7 +12,12 @@
 ```
 radio/
 ├── apps/
-│   ├── web/                 ← 前端（vanilla JS + PWA，已完成）
+│   ├── web/                 ← 前端（vanilla JS + PWA + SSE，已完成）
+│   │   ├── index.html        ← 主页面
+│   │   ├── app.js            ← 核心逻辑（dispatch SSE + 播放队列）
+│   │   ├── style-v3.css      ← 样式
+│   │   ├── manifest.json     ← PWA 配置
+│   │   └── sw.js             ← Service Worker
 │   ├── tts/                 ← TTS 语音合成（分工4，已完成）
 │   │   ├── tts_service/     ← Python FastAPI 服务
 │   │   ├── configs/         ← 三种音色配置
@@ -64,16 +69,6 @@ radio/
 | 分工2 后端 | 已完成 | 联调时可能需要微调 |
 | 分工1 前端 | 已完成 | 联调时可能需要微调 |
 | 分工3 ASR | 待开发 | 接口未定义，需与分工2 协商注入点 |
-
-#### 分工1 要做什么
-
-- React + Vite + PWA 项目骨架
-- SSE 客户端：接收 `chunk` 事件逐字渲染 + `done` 事件解析 PlanResponse
-- 播放器组件：按 items[] 顺序播放（tts 语音 → 歌曲 → tts 语音 → 歌曲）
-- 歌曲卡片：封面 + 歌名 + 歌手 + AI 推荐理由
-- 聊天区：DJ 话术气泡
-- 指令输入框 + 语音按钮（预留分工3 ASR 入口）
-
 
 ---
 
