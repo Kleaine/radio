@@ -63,25 +63,32 @@ export async function enrichItems(
     try {
       // 多搜几首，排除 Live/现场版/有声书/播客/小说，优先取正式音乐
       const allSongs = await musicService.search(query, 8);
-      const badPattern = /live|现场|演唱会|feat\.|remix|伴奏|纯音乐|cover|翻唱|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教/i;
+      // 低优先级：尽量不用，但没有别的版本时可以用
+      const lowPriorityPattern = /伴奏|纯音乐|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教/i;
+      // 更低优先级：Live/现场/remix，比上面好一点
+      const livePattern = /live|现场|演唱会|feat\.|remix/i;
       // 优先匹配歌手+歌名都对的正式版
       // 括号统一化：QQ音乐有时用中文括号，LLM可能输出英文括号
       const normalize = (s: string) => s.replace(/[（(]/g, '(').replace(/[）)]/g, ')').toLowerCase();
       const normTitle = normalize(title);
       const artistLower = artist.toLowerCase();
-      // 歌名+歌手都对 → 优先取非live版，没有就取live版（翻唱也是正版）
+      // 歌名+歌手都对 → 录音室版 > Live版 > 低优先级
       const exactMatches = allSongs.filter(s => {
         const nt = normalize(s.title);
         return (nt.includes(normTitle) || normTitle.includes(nt)) &&
           (!artistLower || s.artist.toLowerCase().includes(artistLower) || artistLower.includes(s.artist.toLowerCase()));
       });
-      const exactMatch = exactMatches.find(s => !badPattern.test(s.title)) ?? exactMatches[0] ?? null;
+      const exactMatch = exactMatches.find(s => !lowPriorityPattern.test(s.title) && !livePattern.test(s.title))
+        ?? exactMatches.find(s => !lowPriorityPattern.test(s.title))
+        ?? exactMatches[0] ?? null;
       // 只匹配歌名
       const titleMatches = allSongs.filter(s => {
         const nt = normalize(s.title);
         return (nt.includes(normTitle) || normTitle.includes(nt));
       });
-      const titleMatch = titleMatches.find(s => !badPattern.test(s.title)) ?? titleMatches[0] ?? null;
+      const titleMatch = titleMatches.find(s => !lowPriorityPattern.test(s.title) && !livePattern.test(s.title))
+        ?? titleMatches.find(s => !lowPriorityPattern.test(s.title))
+        ?? titleMatches[0] ?? null;
       const song = exactMatch ?? titleMatch ?? null;
       // 搜不到确切匹配就不强行匹配，保留原始搜索信息让用户知道没找到
       if (song) {
