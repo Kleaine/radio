@@ -43,6 +43,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentVoice = 'gentle_female';
     let localToken = localStorage.getItem('dj_auth_token') || '';
     let mediaRecorder, audioChunks = [], isRecording = false;
+    
+    // 播放队列管理
+    let playQueue = [];
+    let currentQueueIndex = -1;
+    let currentPlayingCard = null; // 当前播放的歌曲卡片
+    
+    // 导航按钮节点
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
 
     // ================= 3. 会话校验与飞书 OAuth 成功回调检测 =================
     const urlParams = new URLSearchParams(window.location.search);
@@ -322,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ================= 9. 文本输入 + /api/dispatch SSE 对接 =================
     const sendTextDispatch = async (text) => {
+        console.log('sendTextDispatch 被调用，text:', text);
         textSendBtn.disabled = true;
         textInput.disabled = true;
         recordStatus.textContent = 'AI 思考中...';
@@ -473,7 +483,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 scrollToBottom();
 
                 if (item.audioUrl) {
-                    await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
+                    const desc = `🎵 《${item.title}》 - ${item.artist}`;
+                    addToPlayQueue(item.audioUrl, desc);
+                    currentQueueIndex = playQueue.length - 1;
+                    currentPlayingCard = songDiv.querySelector('.song-card');
+                    updateNavButtons();
+                    await playAudio(item.audioUrl, desc);
                 }
             }
         }
@@ -483,20 +498,137 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const playAudio = (url, desc) => {
         return new Promise((resolve) => {
-            audioPlayer.src = url;
-            audioPlayer.play()
-                .then(() => {
-                    djInfoTitle.textContent = '正在播放';
-                    djInfoDesc.textContent = desc;
-                    recordStatus.textContent = '播放中...';
-                })
-                .catch(() => {
-                    // 播放失败也继续队列
-                });
+            if (audioPlayer.src === url && audioPlayer.paused) {
+                audioPlayer.play()
+                    .then(() => {
+                        djInfoTitle.textContent = '正在播放';
+                        djInfoDesc.textContent = desc;
+                        recordStatus.textContent = '播放中...';
+                    })
+                    .catch(() => {
+                        // 播放失败也继续队列
+                    });
+            } else {
+                audioPlayer.src = url;
+                audioPlayer.play()
+                    .then(() => {
+                        djInfoTitle.textContent = '正在播放';
+                        djInfoDesc.textContent = desc;
+                        recordStatus.textContent = '播放中...';
+                    })
+                    .catch(() => {
+                        // 播放失败也继续队列
+                    });
+            }
             audioPlayer.onended = resolve;
             audioPlayer.onerror = resolve;
         });
     };
+
+    // 添加到播放队列
+    const addToPlayQueue = (url, desc) => {
+        const existingIndex = playQueue.findIndex(item => item.url === url);
+        if (existingIndex === -1) {
+            playQueue.push({ url, desc });
+        }
+        updateNavButtons();
+    };
+
+    // 更新导航按钮状态（仅当元素存在时）
+    const updateNavButtons = () => {
+        if (prevBtn) {
+            prevBtn.classList.toggle('disabled', currentQueueIndex <= 0);
+        }
+        if (nextBtn) {
+            nextBtn.classList.toggle('disabled', currentQueueIndex >= playQueue.length - 1);
+        }
+    };
+
+    // 播放指定索引的歌曲
+    const playQueueItem = (index) => {
+        if (index < 0 || index >= playQueue.length) return;
+        currentQueueIndex = index;
+        const item = playQueue[index];
+        audioPlayer.src = item.url;
+        audioPlayer.play()
+            .then(() => {
+                djInfoTitle.textContent = '正在播放';
+                djInfoDesc.textContent = item.desc;
+                recordStatus.textContent = '播放中...';
+            })
+            .catch(() => {});
+        updateNavButtons();
+    };
+
+    // 上一首
+    const playPrev = () => {
+        if (currentQueueIndex > 0) {
+            playQueueItem(currentQueueIndex - 1);
+        }
+    };
+
+    // 下一首
+    const playNext = () => {
+        if (currentQueueIndex < playQueue.length - 1) {
+            playQueueItem(currentQueueIndex + 1);
+        }
+    };
+
+    // 导航按钮事件绑定（仅当元素存在时才绑定）
+    if (prevBtn) {
+        prevBtn.addEventListener('click', playPrev);
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', playNext);
+    }
+
+    // 格式化时间显示
+    const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    // 更新进度条（更新当前播放歌曲卡片中的进度条）
+    const updateProgress = () => {
+        if (!currentPlayingCard || audioPlayer.duration <= 0) return;
+        
+        const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+        const progressFill = currentPlayingCard.querySelector('.song-progress-fill');
+        const currentTimeEl = currentPlayingCard.querySelector('.song-current-time');
+        const durationEl = currentPlayingCard.querySelector('.song-duration');
+        
+        if (progressFill) {
+            progressFill.style.width = `${progress}%`;
+        }
+        if (currentTimeEl) {
+            currentTimeEl.textContent = formatTime(audioPlayer.currentTime);
+        }
+        if (durationEl) {
+            durationEl.textContent = formatTime(audioPlayer.duration);
+        }
+    };
+
+    // 监听播放进度
+    audioPlayer.addEventListener('timeupdate', updateProgress);
+    
+    // 监听音频加载完成
+    audioPlayer.addEventListener('loadedmetadata', () => {
+        if (!currentPlayingCard) return;
+        const durationEl = currentPlayingCard.querySelector('.song-duration');
+        if (durationEl) {
+            durationEl.textContent = formatTime(audioPlayer.duration);
+        }
+    });
+    
+    // 监听播放结束
+    audioPlayer.addEventListener('ended', () => {
+        if (!currentPlayingCard) return;
+        const progressFill = currentPlayingCard.querySelector('.song-progress-fill');
+        const currentTimeEl = currentPlayingCard.querySelector('.song-current-time');
+        if (progressFill) progressFill.style.width = '0%';
+        if (currentTimeEl) currentTimeEl.textContent = '0:00';
+    });
 
     const renderSongCard = (song, selectable = false) => {
         const title = escapeHtml(song.title || '');
@@ -504,39 +636,85 @@ document.addEventListener('DOMContentLoaded', () => {
         const reason = escapeHtml(song.reason || '');
         const cover = song.coverUrl ? `<img src="${escapeHtml(song.coverUrl)}" alt="cover">` : `<div class="cover-placeholder">🎵</div>`;
         const playable = !!song.audioUrl;
-        const playBtn = playable
-            ? `<button class="play-btn" data-url="${escapeHtml(song.audioUrl)}" title="播放">▶</button>`
-            : '';
+        const audioUrlEscaped = playable ? escapeHtml(song.audioUrl) : '';
         const unplayable = !playable ? `<div class="unplayable">无法播放</div>` : '';
         const reasonHtml = reason ? `<div class="reason">💡 ${reason}</div>` : '';
 
-        return `
-            <div class="song-card">
-                <div class="cover">${cover}</div>
-                <div class="info">
-                    <div class="title">${title}</div>
-                    ${artist ? `<div class="artist">${artist}</div>` : ''}
-                    ${reasonHtml}
-                    ${unplayable}
+        // 播放控制区域（进度条在上，按钮在下）
+        const playerControls = playable ? `
+            <div class="song-player">
+                <div class="song-progress">
+                    <div class="song-progress-bar">
+                        <div class="song-progress-fill"></div>
+                    </div>
+                    <div class="song-time">
+                        <span class="song-current-time">0:00</span>
+                        <span class="song-duration">0:00</span>
+                    </div>
                 </div>
-                ${playBtn}
+                <div class="song-nav">
+                    <button class="song-prev-btn" data-url="${audioUrlEscaped}" title="上一首">⏮</button>
+                    <button class="song-play-btn" data-url="${audioUrlEscaped}" title="播放">▶</button>
+                    <button class="song-next-btn" data-url="${audioUrlEscaped}" title="下一首">⏭</button>
+                </div>
+            </div>
+        ` : '';
+
+        return `
+            <div class="song-card" data-audio-url="${audioUrlEscaped}">
+                <div class="song-header">
+                    <div class="cover">${cover}</div>
+                    <div class="info">
+                        <div class="title">${title}</div>
+                        ${artist ? `<div class="artist">${artist}</div>` : ''}
+                        ${reasonHtml}
+                        ${unplayable}
+                    </div>
+                </div>
+                ${playerControls}
             </div>
         `;
     };
 
-    // 事件委托：点击搜索结果的播放按钮
+    // 事件委托：点击歌曲卡片中的播放按钮
     chatBox.addEventListener('click', (e) => {
-        const btn = e.target.closest('.play-btn');
-        if (!btn) return;
-        const url = btn.getAttribute('data-url');
-        if (url) {
-            audioPlayer.src = url;
-            audioPlayer.play().catch(() => {});
+        // 播放按钮
+        const playBtn = e.target.closest('.song-play-btn');
+        if (playBtn) {
+            const url = playBtn.getAttribute('data-url');
+            if (url) {
+                const songCard = playBtn.closest('.song-card');
+                currentPlayingCard = songCard;
+                audioPlayer.src = url;
+                audioPlayer.play()
+                    .then(() => {
+                        playBtn.textContent = '⏸';
+                        djInfoTitle.textContent = '正在播放';
+                        recordStatus.textContent = '播放中...';
+                    })
+                    .catch(() => {});
+            }
+            return;
+        }
+
+        // 上一首按钮
+        const prevBtn = e.target.closest('.song-prev-btn');
+        if (prevBtn) {
+            playPrev();
+            return;
+        }
+
+        // 下一首按钮
+        const nextBtn = e.target.closest('.song-next-btn');
+        if (nextBtn) {
+            playNext();
+            return;
         }
     });
 
     // 文本输入事件绑定
     textSendBtn.addEventListener('click', () => {
+        console.log('发送按钮被点击');
         const text = textInput.value.trim();
         if (!text) return;
         textInput.value = '';
@@ -547,10 +725,18 @@ document.addEventListener('DOMContentLoaded', () => {
     textInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
+            console.log('Enter键被按下');
             textSendBtn.click();
         }
     });
 
-    // 页面加载完成后自动聚焦输入框
-    setTimeout(() => textInput.focus(), 500);
+    // 页面加载完成后自动聚焦输入框并确保启用
+    setTimeout(() => {
+        console.log('页面加载完成，初始化输入框');
+        console.log('textInput:', textInput);
+        console.log('textSendBtn:', textSendBtn);
+        textInput.disabled = false;
+        textSendBtn.disabled = false;
+        textInput.focus();
+    }, 500);
 });
