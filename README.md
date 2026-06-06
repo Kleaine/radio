@@ -161,19 +161,18 @@ radio/
 ### 2026-06-06 — @Kleaine
 
 **后端**
-- `prompts/plan-system.md` — DJ 人设精炼，从 193 行瘦到 120 行
+- `prompts/plan-system.md` — DJ 人设精炼，从 193 行瘦到 120 行，去掉臃肿规则回归原则
 - `routes/audio.routes.ts` — 新建，`/api/audio` 懒加载代理 + URL 预缓存
-- `routes/dispatch.routes.ts` — 服务单例懒加载 + AI 完整回复记忆 + enrich 后预缓存
+- `routes/dispatch.routes.ts` — 服务单例懒加载 + AI 完整回复记忆 + 搜索只匹配极简指令（混合意图走AI）
 - `routes/player.routes.ts` — 新增 `POST /api/player/report-play` 播歌上报
-- `services/plan-enrich.ts` — 并行化 Promise.all + 20+ 非音乐过滤 + 歌手歌名双重匹配 + 括号统一化 + 播放链接懒加载
+- `services/plan-enrich.ts` — 并行化 + 三级优先级选歌（录音室>Live）+ 有声书/伴奏完全排除 + 歌名必须匹配不乱放
 - `services/context.service.ts` — 25 首黑名单 + Top 10 口味画像 + 天气格式化
 - `services/weather.service.ts` — 缓存 30min
 - `data/qq_bridge.py` — 新增收藏/歌单/每日推荐拉取接口
 
 **前端**
-- `index.html` — 进场问候改为"我是小雨，你的私人音乐电台"
-- `app.js` — 双模式播放（推荐/电台）+ 播歌上报 + 开场白/串词分离
-- `style-v3.css` — loading 动画
+- `index.html` — 进场问候"我是小雨，你的私人音乐电台 🎧"
+- `app.js` — 双模式播放（推荐一次性出卡片 / 电台逐首渲染逐首播）+ 播歌上报
 
 ### 2026-06-05
 
