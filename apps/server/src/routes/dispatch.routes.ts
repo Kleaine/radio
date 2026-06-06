@@ -70,22 +70,28 @@ const SEARCH_PATTERNS = [
   { regex: /^(.+)的歌$/, group: 1 },
 ];
 
-// 检查是否匹配指令
-function matchCommand(message: string): string | null {
-  for (const { regex, action } of COMMAND_PATTERNS) {
-    if (regex.test(message)) return action;
+// 检查是否匹配搜索
+function matchSearch(message: string): string | null {
+  // 包含"推荐"、"我想听"、逗号句号等复杂表达的走 AI，不走搜索
+  if (/推荐|我想|我要|想要|帮|给|放点|来点/.test(message)) return null;
+  if (/[，。,！？、]/.test(message)) return null;
+
+  for (const { regex, group } of SEARCH_PATTERNS) {
+    const match = message.match(regex);
+    if (match?.[group]) {
+      const kw = match[group].trim();
+      // 关键词太长（超过15字）或者带书名号的走 AI
+      if (kw.length > 15 || /《/.test(kw)) return null;
+      return kw;
+    }
   }
   return null;
 }
 
-// 检查是否匹配搜索
-function matchSearch(message: string): string | null {
-  // 包含"推荐"的不走搜索
-  if (/推荐/.test(message)) return null;
-
-  for (const { regex, group } of SEARCH_PATTERNS) {
-    const match = message.match(regex);
-    if (match?.[group]) return match[group].trim();
+// 检查是否匹配指令
+function matchCommand(message: string): string | null {
+  for (const { regex, action } of COMMAND_PATTERNS) {
+    if (regex.test(message)) return action;
   }
   return null;
 }
