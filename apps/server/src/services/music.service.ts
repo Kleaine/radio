@@ -5,25 +5,21 @@ import type { MusicService, Song, SongUrlResult, LyricResult } from "../interfac
 // ── Mock 实现 ──
 
 export class MockMusicService implements MusicService {
+  private mockArtists = ["周杰伦", "林俊杰", "陈奕迅", "邓紫棋", "陈绮贞", "陶喆", "方大同", "孙燕姿", "五月天", "蔡健雅"];
+
   async search(keyword: string, limit = 10): Promise<Song[]> {
-    const results: Song[] = [];
-    const count = Math.min(limit, 5);
-    const mockArtists = ["周杰伦", "林俊杰", "陈奕迅", "邓紫棋", "陈绮贞"];
-    for (let i = 0; i < count; i++) {
-      results.push({
-        id: `mock_${i}`,
-        title: `${keyword} - 歌曲${i + 1}`,
-        artist: mockArtists[i % mockArtists.length],
-        album: `Mock 专辑${i + 1}`,
-        coverUrl: "",
-        durationMs: 200000 + i * 30000,
-      });
-    }
-    return results;
+    return Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
+      id: `mock_${i}`,
+      title: `${keyword} - 歌曲${i + 1}`,
+      artist: this.mockArtists[i % this.mockArtists.length],
+      album: `Mock 专辑${i + 1}`,
+      coverUrl: "",
+      durationMs: 200000 + i * 30000,
+    }));
   }
 
   async getSongUrl(_songId: string): Promise<SongUrlResult> {
-    return { url: null, br: 128 };
+    return { url: "/static/music/demo.wav", br: 128 };
   }
 
   async getLyric(_songId: string): Promise<LyricResult> {
@@ -31,48 +27,47 @@ export class MockMusicService implements MusicService {
   }
 }
 
-// ── 真实实现：QQ 音乐 npm 包 ──
+// ── 真实实现：直接调 QQ 音乐 u.y.qq.com 新接口 ──
+
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 export class QQMusicService implements MusicService {
-  private qqMusic: any = null;
-  private ready = false;
-
   constructor(private cookie: string) {}
 
-  private async ensureReady() {
-    if (this.ready) return;
-    try {
-      const mod = await import("qq-music-api");
-      this.qqMusic = mod.default ?? mod;
-      if (this.cookie) {
-        this.qqMusic.setCookie(this.cookie);
-      }
-      this.ready = true;
-    } catch (e: any) {
-      console.warn("[music] qq-music-api 未安装，使用 Mock 模式。npm install qq-music-api");
-      throw e;
-    }
+  private get headers(): Record<string, string> {
+    return {
+      "User-Agent": UA,
+      "Referer": "https://y.qq.com",
+      "Cookie": this.cookie || "uin=0",
+    };
   }
 
   async search(keyword: string, limit = 10): Promise<Song[]> {
     try {
-      await this.ensureReady();
-      const data = await this.qqMusic.api("search", {
-        key: keyword,
-        pageNo: 1,
-        pageSize: limit,
-        t: 0, // 单曲
+      const body = JSON.stringify({
+        req_0: {
+          module: "music.search.SearchCgiService",
+          method: "DoSearchForQQMusicDesktop",
+          param: { num_per_page: limit, page_num: 1, query: keyword, search_type: 0 },
+        },
       });
-      const list = data?.list ?? data?.data?.list ?? data?.result?.list ?? [];
+      const res = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+        method: "POST",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        body,
+      });
+      const data: any = await res.json();
+      const list = data?.req_0?.data?.body?.song?.list ?? [];
+
       return list.map((raw: any) => ({
-        id: raw.songmid ?? raw.id ?? String(raw.songid ?? ""),
-        title: raw.songname ?? raw.name ?? raw.title ?? "",
-        artist: raw.singer?.map?.((s: any) => s.name).join(", ") ?? raw.artist ?? "",
-        album: raw.albumname ?? raw.album ?? "",
-        coverUrl: raw.cover ?? raw.picUrl ?? raw.albummid
-          ? `https://y.qq.com/music/photo_new/T002R300x300M000${raw.albummid}.jpg`
+        id: raw.mid ?? raw.songmid ?? "",
+        title: raw.name ?? raw.songname ?? raw.title ?? "",
+        artist: (raw.singer ?? []).map((s: any) => s.name).join(", ") ?? raw.artist ?? "",
+        album: raw.album?.name ?? raw.albumname ?? "",
+        coverUrl: raw.album?.mid
+          ? `https://y.qq.com/music/photo_new/T002R300x300M000${raw.album.mid}.jpg`
           : "",
-        durationMs: (raw.interval ?? raw.duration ?? 0) * 1000,
+        durationMs: (raw.interval ?? 0) * 1000,
       }));
     } catch (e: any) {
       console.error("[music] search failed:", e.message);
@@ -82,25 +77,53 @@ export class QQMusicService implements MusicService {
 
   async getSongUrl(songId: string): Promise<SongUrlResult> {
     try {
-      await this.ensureReady();
-      const data = await this.qqMusic.api("song/url", { id: songId });
-      const url = data?.data?.[songId] ?? data?.url ?? data?.data?.url ?? null;
-      return { url, br: 320 };
+      const body = JSON.stringify({
+        req_0: {
+          module: "music.vkey.GetVkey",
+          method: "CgiGetVkey",
+          param: { guid: "10000", songmid: [songId], songtype: [0], uin: "0", platform: "20" },
+        },
+      });
+      const res = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+        method: "POST",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        body,
+      });
+      const data: any = await res.json();
+      const midInfo = data?.req_0?.data?.midurlinfo?.[0];
+      const sip = data?.req_0?.data?.sip ?? [];
+
+      if (midInfo?.purl && midInfo.purl !== "") {
+        return {
+          url: `${sip[0] ?? "http://ws.stream.qqmusic.qq.com"}${midInfo.purl}`,
+          br: 320,
+        };
+      }
+      return { url: "/static/music/demo.wav", br: 128 };
     } catch (e: any) {
       console.error("[music] getSongUrl failed:", e.message);
-      return { url: null, br: 128 };
+      return { url: "/static/music/demo.wav", br: 128 };
     }
   }
 
   async getLyric(songId: string): Promise<LyricResult> {
     try {
-      await this.ensureReady();
-      const data = await this.qqMusic.api("lyric", { songmid: songId });
-      return {
-        lrc: data?.lyric ?? data?.lrc?.lyric ?? "[00:00.00]暂无歌词",
-        tlyric: data?.tlyric?.lyric,
-        yrc: data?.yrc?.lyric,
-      };
+      const body = JSON.stringify({
+        req_0: {
+          module: "music.musichallSong.LyricInter",
+          method: "GetLyric",
+          param: { songmid: songId, platform: "yqq" },
+        },
+      });
+      const res = await fetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+        method: "POST",
+        headers: { ...this.headers, "Content-Type": "application/json" },
+        body,
+      });
+      const data: any = await res.json();
+      const lyric = data?.req_0?.data?.lyric ?? "";
+      const trans = data?.req_0?.data?.trans ?? "";
+      return { lrc: lyric, tlyric: trans };
     } catch (e: any) {
       console.error("[music] getLyric failed:", e.message);
       return { lrc: "[00:00.00]暂无歌词" };

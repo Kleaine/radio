@@ -162,7 +162,7 @@ async function callDoubaoStream(
       ],
       stream: true,
       max_tokens: 4096,
-      temperature: 0.8,
+      temperature: 0.3,
     }, { signal: controller.signal });
 
     let fullText = "";
@@ -202,7 +202,7 @@ async function callDoubao(
       ],
       stream: false,
       max_tokens: 4096,
-      temperature: 0.8,
+      temperature: 0.3,
     }, { signal: controller.signal });
 
     return completion.choices?.[0]?.message?.content ?? "";
