@@ -94,11 +94,14 @@ function matchCommand(message: string): string | null {
   return null;
 }
 
-// AI 记忆：记录上一次的完整开场白，下次对话时让 LLM 知道自己说过什么
+// AI 记忆：持久化到文件，重启不丢
+const AI_MEMORY_FILE = path.resolve(__dirname, "..", "..", "..", "..", "user", "last_ai_message.txt");
 let lastAiOpening: string = "";
+try { lastAiOpening = fs.readFileSync(AI_MEMORY_FILE, "utf-8").trim(); } catch {}
 
 function setLastAiOpening(opening: string) {
   lastAiOpening = opening;
+  try { fs.writeFileSync(AI_MEMORY_FILE, opening, "utf-8"); } catch {}
 }
 
 // 懒加载单例 — 首次请求时初始化，之后复用
