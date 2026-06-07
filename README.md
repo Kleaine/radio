@@ -174,7 +174,13 @@ radio/
 - `dispatch.routes.ts` — close 事件改用 res 避免 Windows curl 误触发
 - `context.service.ts` — memoryProfile 改名避免与 profile.service 冲突
 
-### 2026-06-07 — @Kleaine
+### 2026-06-07 — @Kleaine（晚间）
+
+**播放器修复**
+- `app.js` — 砍掉预生成防卡片堆积，按钮全局重置，播完自动续播，点下一首串词先播填空白
+- `plan-system.md` — "最后"改为智能收尾：默认连续播，用户说数量才收尾
+
+### 2026-06-07 — @Kleaine（下午）
 
 **审计修复**
 - `chat.routes.ts` — 修复 recentPlays 类型损坏 + 加 topArtists + AI 记忆
