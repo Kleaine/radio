@@ -326,6 +326,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ================= 9. 文本输入 + /api/dispatch SSE 对接 =================
+    // 打字机效果
+    let _typewriterQueue = '';
+    let _typewriterTimer = null;
+    const TYPE_SPEED = 35; // ms/字
+
+    const _startTypewriter = (contentDiv) => {
+        if (_typewriterTimer) return;
+        _typewriterTimer = setInterval(() => {
+            if (_typewriterQueue.length === 0) {
+                clearInterval(_typewriterTimer);
+                _typewriterTimer = null;
+                return;
+            }
+            contentDiv.textContent += _typewriterQueue[0];
+            _typewriterQueue = _typewriterQueue.slice(1);
+            scrollToBottom();
+        }, TYPE_SPEED);
+    };
+
+    const _flushTypewriter = (contentDiv) => {
+        if (_typewriterQueue) {
+            contentDiv.textContent += _typewriterQueue;
+            _typewriterQueue = '';
+        }
+        if (_typewriterTimer) {
+            clearInterval(_typewriterTimer);
+            _typewriterTimer = null;
+        }
+        scrollToBottom();
+    };
+
     const sendTextDispatch = async (text) => {
         textSendBtn.disabled = true;
         textInput.disabled = true;
@@ -379,12 +410,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (line.startsWith('data:')) {
                         const data = line.slice(5).trim();
                         if (currentEvent === 'chunk') {
-                            contentDiv.textContent += data;
-                            scrollToBottom();
+                            _typewriterQueue += data;
+                            _startTypewriter(contentDiv);
                             recordStatus.textContent = 'DJ 正在播报...';
                         } else if (currentEvent === 'status') {
                             recordStatus.textContent = data;
                         } else if (currentEvent === 'done') {
+                            _flushTypewriter(contentDiv);
                             handleDoneEvent(data, sDiv);
                         }
                         currentEvent = null;
@@ -400,11 +432,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (line.startsWith('data:')) {
                     const data = line.slice(5).trim();
                     if (currentEvent === 'chunk') {
-                        contentDiv.textContent += data;
-                        recordStatus.textContent = 'DJ 正在播报...';
+                        _typewriterQueue += data;
+                        _startTypewriter(contentDiv);
                     } else if (currentEvent === 'status') {
                         recordStatus.textContent = data;
                     } else if (currentEvent === 'done') {
+                        _flushTypewriter(contentDiv);
                         handleDoneEvent(data, sDiv);
                     }
                 }
