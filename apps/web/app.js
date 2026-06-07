@@ -464,7 +464,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const type = payload.type;
         if (type === 'command') {
-            // 指令匹配成功，无需额外渲染
+            // 指令匹配：执行对应操作
+            if (payload.action === 'next') playNext();
+            else if (payload.action === 'prev') playPrev();
             return;
         }
 
@@ -561,6 +563,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
                         }).catch(() => {});
+                        // 播到倒数第二首时，后台预生成下一轮
+                        const songCount = items.filter(it => it.type === 'song').length;
+                        const currentSongIdx = items.slice(0, i + 1).filter(it => it.type === 'song').length;
+                        if (currentSongIdx >= songCount - 1) {
+                            fetch('/api/dispatch', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localToken}` },
+                                body: JSON.stringify({ message: '继续', voice: currentVoice })
+                            }).catch(() => {});
+                        }
                         await playAudio(item.audioUrl, desc);
                     }
                 }
