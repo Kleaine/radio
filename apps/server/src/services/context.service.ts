@@ -91,14 +91,28 @@ export function createContextService(config: ContextConfig): ContextService {
       const calendar = await getCalendarText();
       if (calendar) parts.push(`今日日程：${calendar}`);
 
-      // 常听歌手（口味画像）
+      // ── 用户口味画像（模仿 Claudio ProfileService.getProfileSummary()）──
+      const tasteParts: string[] = [];
       if (config.topArtists?.length) {
-        parts.push(`用户常听歌手：${config.topArtists.join("、")}`);
+        tasteParts.push(`常听歌手：${config.topArtists.slice(0, 8).join("、")}`);
+      }
+      // 从播放历史推断年代/风格偏好
+      const artistSet = new Set(config.topArtists ?? []);
+      const eraHints: string[] = [];
+      if (artistSet.has("周杰伦") || artistSet.has("陶喆") || artistSet.has("王力宏") || artistSet.has("林俊杰")) eraHints.push("2000s华语R&B/流行");
+      if (artistSet.has("陈奕迅") || artistSet.has("张学友") || artistSet.has("张国荣")) eraHints.push("粤语经典");
+      if (artistSet.has("方大同") || artistSet.has("袁娅维") || artistSet.has("9m88")) eraHints.push("neo-soul/urban");
+      if (eraHints.length > 0) tasteParts.push(`偏好风格：${eraHints.join("、")}`);
+      if (tasteParts.length > 0) {
+        parts.push(`用户口味画像：${tasteParts.join("。")}`);
       }
 
-      // AI 上一次说的所有话——看了就知道别再重复
+      // 推荐策略：70% 口味内 + 30% 惊喜
+      parts.push("推荐策略：70%基于口味画像推荐，30%推荐风格相近但用户没听过的好歌");
+
+      // AI 上一次的回复——避免重复
       if (config.lastAiOpening) {
-        parts.push(`你上一次的回复全文（仔细看，别在开场白里重复同样的天气、温度、话题）：${config.lastAiOpening}`);
+        parts.push(`你上一次说过的内容（别重复）：${config.lastAiOpening.slice(0, 200)}`);
       }
 
       // 最近播放——避免重复推荐
