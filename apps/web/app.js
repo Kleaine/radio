@@ -369,15 +369,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         _lastUserMessage = silent ? _lastUserMessage : text;
 
-        // 创建系统消息气泡，用于流式追加
+        // 静默请求不创建聊天气泡
         const sDiv = document.createElement('div');
         sDiv.className = 'message system-message';
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         contentDiv.textContent = '';
         sDiv.appendChild(contentDiv);
-        chatBox.appendChild(sDiv);
-        scrollToBottom();
+        if (!silent) {
+            chatBox.appendChild(sDiv);
+            scrollToBottom();
+        }
 
         let buffer = '';
         let currentEvent = null;
@@ -422,6 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         } else if (currentEvent === 'tts_ready') {
                             try {
                                 const tts = JSON.parse(data);
+                                if (tts.text && sDiv) {
+                                    const ttsDiv = document.createElement('div');
+                                    ttsDiv.className = 'tts-card';
+                                    ttsDiv.textContent = tts.text;
+                                    sDiv.appendChild(ttsDiv);
+                                    scrollToBottom();
+                                }
                                 if (tts.url) playAudio(tts.url, tts.text || 'DJ 播报');
                             } catch {}
                         } else if (currentEvent === 'done') {
@@ -503,7 +512,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (type === 'plan') {
-            // 旧 done 事件中的 plan 类型，兼容
+            // 静默请求：sDiv 没挂到 DOM，先挂上
+            if (sDiv && !sDiv.parentNode) {
+                chatBox.appendChild(sDiv);
+            }
             const items = payload.items || [];
             playPlanItems(items, sDiv);
             return;
@@ -522,9 +534,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isRecommend = /推荐/.test(_lastUserMessage);
 
-        // 正在播放 + 新计划来了 → 追加到待播队列，只渲染卡片不打断
+        // 正在播放 + 新计划来了 → 追加渲染卡片
         if (_isPlaying && !isRecommend) {
             _fetchingNext = false;
+            resetAllCardButtons();
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 if (item.type === 'tts') {
