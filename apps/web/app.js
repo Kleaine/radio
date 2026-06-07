@@ -669,10 +669,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentQueueIndex < playQueue.length - 1) {
             playQueueItem(currentQueueIndex + 1);
         } else {
-            // 队列播完了，跳过当前歌，自动要下一轮
+            // 队列播完了，请求 AI 生成下一轮
             audioPlayer.pause();
-            textInput.value = '下一首';
+            playQueue = [];
+            currentQueueIndex = -1;
+            // 用空字符串触发 sendTextDispatch，它内部会发 /api/dispatch
+            const origText = textInput.value;
+            textInput.value = '继续';
             textSendBtn.click();
+            textInput.value = origText;
         }
     };
 
