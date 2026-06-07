@@ -625,11 +625,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 本批播完，如果没有已经在请求中，自动续
+        // 播完如果队列快空了，后台静默预取下一批（只入队不渲染）
         _isPlaying = false;
         resetUI();
-        if (_autoContinue && !_fetchingNext) {
-            _autoContinue = true;
+        if (playQueue.length - currentQueueIndex <= 2 && !_fetchingNext) {
             _fetchingNext = true;
             sendTextDispatch('继续', true);
         }
