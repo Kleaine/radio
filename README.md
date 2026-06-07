@@ -167,6 +167,13 @@ radio/
 
 ## 更新日志
 
+### 2026-06-07 — @akakwkwk（后端）
+
+- `qq_bridge.py` — 重写搜索，用 SongFileInfo API 适配 qqmusic_api 0.5.x，修复播放链接获取
+- `audio.routes.ts` — preWarmUrls 改为逐个查询，兼容新单 mid 接口
+- `dispatch.routes.ts` — close 事件改用 res 避免 Windows curl 误触发
+- `context.service.ts` — memoryProfile 改名避免与 profile.service 冲突
+
 ### 2026-06-07 — @Kleaine
 
 **审计修复**
