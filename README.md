@@ -79,17 +79,18 @@ radio/
 │       │   ├── index.ts              ← Express 入口
 │       │   ├── services/             ← AI 大脑（分工5）
 │       │   │   ├── llm.service.ts    ← 豆包流式调用
-│       │   │   ├── context.service.ts← 上下文组装
+│       │   │   ├── context.service.ts← 上下文组装（天气/日程/口味/历史）
 │       │   │   ├── music.service.ts  ← QQ音乐桥接 + Mock
-│       │   │   ├── weather.service.ts← 天气三层回退
+│       │   │   ├── weather.service.ts← 天气三层回退 + 30min缓存
 │       │   │   ├── calendar.service.ts← 日程读写
 │       │   │   ├── memory-writer.ts  ← 偏好自动记录
-│       │   │   └── plan-enrich.ts    ← 歌曲补全 + 智能过滤
+│       │   │   ├── plan-enrich.ts    ← 歌曲补全 + 智能过滤 + 并行
+│       │   │   └── profile.service.ts← 动态口味画像（每次播歌更新）
 │       │   ├── routes/               ← HTTP 路由
-│       │   │   ├── dispatch.routes.ts← 三层意图分发 + SSE
-│       │   │   ├── audio.routes.ts   ← 音频代理 + 预缓存
+│       │   │   ├── dispatch.routes.ts← 三层意图分发 + SSE + 断连保护
+│       │   │   ├── audio.routes.ts   ← 音频代理（透传+302兜底+缓存上限）
 │       │   │   ├── chat.routes.ts    ← 语音聊天
-│       │   │   ├── player.routes.ts  ← 播放控制
+│       │   │   ├── player.routes.ts  ← 播放控制 + 播歌上报
 │       │   │   ├── auth.routes.ts    ← 登录注册
 │       │   │   └── schedule.routes.ts← 飞书日程
 │       │   ├── middleware/           ← JWT / 错误 / 响应封装
@@ -111,6 +112,8 @@ radio/
 │   └── music/demo.wav                ← 样本音频
 │
 ├── user/
+│   ├── profile.json                  ← 动态口味画像（自动累积）
+│   ├── last_ai_message.txt           ← AI 记忆（重启不丢）
 │   ├── taste.md                      ← 音乐品味
 │   ├── routines.md                   ← 作息习惯
 │   └── mood-rules.md                 ← 情绪规则
@@ -163,6 +166,27 @@ radio/
 ---
 
 ## 更新日志
+
+### 2026-06-07 — @Kleaine
+
+**审计修复**
+- `chat.routes.ts` — 修复 recentPlays 类型损坏导致个性化失效
+- `dispatch.routes.ts` — SSE 断连保护（客户端关闭不浪费 API 配额）
+- `audio.routes.ts` — URL 缓存上限 200 条防止内存泄漏
+- `plan-enrich.ts` — 正则提到模块级避免重复编译
+- `llm.service.ts` — items 非数组防御检查
+
+**个性化推荐**
+- `profile.service.ts` — 新建，动态口味画像：每次播歌累积歌手权重，持久化 `user/profile.json`
+- `context.service.ts` — 口味画像 + 推荐策略（70%偏好+30%惊喜）
+
+**音频代理**
+- `audio.routes.ts` — 从 302 重定向改为透传+302 兜底双保险
+
+**前端**
+- 卡片等比例微缩 + DJ 头像中间值 + 进度条可点击跳转
+- 播放互斥锁 + 切歌时新旧卡片状态同步
+- 下一首秒切 + 队列空时静默续播
 
 ### 2026-06-07 — @hyd2005
 
