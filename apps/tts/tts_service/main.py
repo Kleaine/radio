@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import time
 import uuid
@@ -26,6 +27,11 @@ app = FastAPI(title="Local TTS Service", version="0.1.0")
 class SynthesizeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
     voice: str = Field(..., examples=["gentle_female", "lively_female", "announcer_male"])
+    text_lang: str | None = Field(default=None, examples=["zh", "en"])
+
+
+def infer_text_lang(text: str) -> str:
+    return "zh" if any("\u4e00" <= char <= "\u9fff" for char in text) else "en"
 
 
 def load_voices() -> dict[str, dict[str, Any]]:
@@ -43,6 +49,10 @@ def postprocess_audio(raw_path: Path, out_path: Path, voice: dict[str, Any]) -> 
     sample_rate = int(effects.get("sample_rate", 32000))
 
     if pitch_semitones == 0 and tempo == 1.0:
+        raw_path.replace(out_path)
+        return
+
+    if shutil.which("ffmpeg") is None:
         raw_path.replace(out_path)
         return
 
@@ -106,9 +116,14 @@ def synthesize(req: SynthesizeRequest) -> FileResponse:
             ),
         )
 
+    text = req.text.strip()
+    text_lang = (req.text_lang or infer_text_lang(text)).lower()
+    if text_lang not in {"zh", "en"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported text_lang: {text_lang}")
+
     payload = {
-        "text": req.text.strip(),
-        "text_lang": "zh",
+        "text": text,
+        "text_lang": text_lang,
         "ref_audio_path": str(ref_audio_path),
         "prompt_text": voice["prompt_text"],
         "prompt_lang": voice.get("prompt_lang", "zh"),
