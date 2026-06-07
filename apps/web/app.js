@@ -655,8 +655,29 @@ document.addEventListener('DOMContentLoaded', () => {
     // 播放指定队列索引（自动处理串词→歌曲）
     const playQueueItem = async (index) => {
         if (index < 0 || index >= playQueue.length) return;
+
+        // 重置旧卡片 UI
+        if (currentPlayingCard) {
+            const oldBtn = currentPlayingCard.querySelector('.song-play-btn');
+            if (oldBtn) oldBtn.textContent = '▶';
+            const oldFill = currentPlayingCard.querySelector('.song-progress-fill');
+            if (oldFill) oldFill.style.width = '0%';
+        }
+
         currentQueueIndex = index;
         const item = playQueue[index];
+
+        // 找到新卡片
+        const allCards = document.querySelectorAll('.song-card');
+        for (const card of allCards) {
+            if (card.getAttribute('data-audio-url') === item.url) {
+                currentPlayingCard = card;
+                const btn = card.querySelector('.song-play-btn');
+                if (btn) btn.textContent = '⏸';
+                break;
+            }
+        }
+
         // 先播串词 TTS
         if (item.ttsUrl) {
             await new Promise((resolve) => {
@@ -664,7 +685,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 audioPlayer.play().then(() => {
                     djInfoTitle.textContent = 'DJ 串词';
                     djInfoDesc.textContent = item.ttsText || '';
-                    recordStatus.textContent = '播报中...';
                 }).catch(() => {});
                 audioPlayer.onended = resolve;
                 audioPlayer.onerror = resolve;
@@ -678,10 +698,8 @@ document.addEventListener('DOMContentLoaded', () => {
             recordStatus.textContent = '播放中...';
         }).catch(() => {});
         audioPlayer.onended = () => {
-            // 自动续播下一首
-            const state = { currentQueueIndex, playQueue };
-            if (state.currentQueueIndex < state.playQueue.length - 1) {
-                playQueueItem(state.currentQueueIndex + 1);
+            if (currentQueueIndex < playQueue.length - 1) {
+                playQueueItem(currentQueueIndex + 1);
             }
         };
     };
