@@ -419,6 +419,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             recordStatus.textContent = 'DJ 正在播报...';
                         } else if (currentEvent === 'status') {
                             recordStatus.textContent = data;
+                        } else if (currentEvent === 'tts_ready') {
+                            try {
+                                const tts = JSON.parse(data);
+                                if (tts.url) playAudio(tts.url, tts.text || 'DJ 播报');
+                            } catch {}
                         } else if (currentEvent === 'done') {
                             _flushTypewriter(contentDiv);
                             handleDoneEvent(data, sDiv);
@@ -438,6 +443,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (currentEvent === 'chunk') {
                         _typewriterQueue += data;
                         _startTypewriter(contentDiv);
+                    } else if (currentEvent === 'tts_ready') {
+                        try { const tts = JSON.parse(data); if (tts.url) playAudio(tts.url, tts.text || 'DJ 播报'); } catch {}
                     } else if (currentEvent === 'status') {
                         recordStatus.textContent = data;
                     } else if (currentEvent === 'done') {

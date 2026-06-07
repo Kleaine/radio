@@ -293,12 +293,16 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       }
     );
 
-    // 增强 items（TTS 合成 + 搜歌 ID/封面，播放链接走 /api/audio 懒加载）
+    // 增强 items：TTS 合成立即推送，歌慢慢搜
     const voiceStyle = req.body.voice || "gentle_female";
     const enrichedItems = await enrichItems(plan.items, {
       musicService: getMusicService(),
       ttsService: {
-        synthesize: (text: string, voice?: string) => callTTS(text, voice || voiceStyle),
+        synthesize: async (text: string, voice?: string) => {
+          const url = await callTTS(text, voice || voiceStyle);
+          if (url) sendEvent("tts_ready", JSON.stringify({ text, url }));
+          return url;
+        },
       },
     });
 
