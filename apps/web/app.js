@@ -534,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isRecommend = /推荐/.test(_lastUserMessage);
 
-        // 正在播放 + 新计划来了 → 只入队，不渲染（等自然切歌时逐个出现）
+        // 正在播放 + 新计划来了 → 入队并立即播第一首
         if (_isPlaying && !isRecommend) {
             _fetchingNext = false;
             for (let i = 0; i < items.length; i++) {
@@ -551,6 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`, prevTtsUrl, prevTtsText);
                 }
             }
+            playQueueItem(currentQueueIndex + 1);
             return;
         }
 
