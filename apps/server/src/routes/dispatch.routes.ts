@@ -202,7 +202,9 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
   });
 
   let aborted = false;
-  req.on("close", () => { aborted = true; });
+  // 注意：Windows 上 curl 可能触发误报的 close 事件
+  // 只在响应结束后才标记为中止
+  res.on("close", () => { aborted = true; });
 
   // 发送 SSE 事件的辅助函数
   const sendEvent = (event: string, data: string) => {
@@ -225,11 +227,9 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
 
   // 第2层：搜索意图
   const searchKeyword = matchSearch(message);
-  console.log("[dispatch] 搜索匹配结果:", searchKeyword);
   if (searchKeyword) {
     try {
       const songs = await getMusicService().search(searchKeyword, 10);
-      // 预验证：只返回有播放链接的歌曲
       const mids = songs.map(s => s.id).filter(Boolean);
       if (mids.length > 0) {
         await preWarmUrls(mids);

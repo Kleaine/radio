@@ -1,12 +1,16 @@
-"""QQ音乐桥接：搜索+播放链接"""
+"""QQ音乐桥接：搜索+播放链接（适配 qqmusic_api 0.5.x）"""
 import asyncio, json, sys, os
 # 强制 UTF-8 输出，避免 Windows GBK 乱码
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 from qqmusic_api import Client, Credential
+from qqmusic_api.modules.song import SongFileInfo, SongFileType
 
 CRED_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qq_credential.json")
+
+# 默认 SIP 服务器
+DEFAULT_SIP = "http://ws.stream.qqmusic.qq.com/"
 
 def load_cred():
     try:
@@ -29,24 +33,43 @@ def load_cred():
         return None
 
 async def search_songs(keyword: str, limit: int = 5):
-    api = Client(credential=load_cred())
+    cred = load_cred()
+    api = Client(credential=cred)
     result = await api.search.search_by_type(keyword, num=limit)
     songs = result.song[:limit]
     if not songs:
         return []
+
+    # 获取歌曲详情
     mids = [s.mid for s in songs]
     detail = await api.song.query_song(mids)
     tracks = detail.tracks
-    urls_data = await api.song.get_song_urls(tracks)
-    sip = urls_data.sip[0] if hasattr(urls_data, 'sip') and urls_data.sip else "http://ws.stream.qqmusic.qq.com/"
-
-    # 按 mid 建索引，避免 tracks/songs 顺序不一致导致错配
     track_map = {t.mid: t for t in tracks}
-    url_map = {}
-    for i, u in enumerate(urls_data.data if hasattr(urls_data, 'data') else []):
-        if i < len(tracks) and u.purl:
-            url_map[tracks[i].mid] = f"{sip}{u.purl}"
 
+    # 构建 SongFileInfo 列表
+    file_infos = []
+    for track in tracks:
+        if track.file and track.file.media_mid:
+            file_infos.append(SongFileInfo(
+                mid=track.mid,
+                file_type=SongFileType.MP3_128,
+                song_type=track.type,
+                media_mid=track.file.media_mid
+            ))
+
+    # 获取播放链接
+    url_map = {}
+    if file_infos:
+        try:
+            urls_data = await api.song.get_song_urls(file_infos, credential=cred)
+            if urls_data.data:
+                for i, item in enumerate(urls_data.data):
+                    if item.purl and i < len(file_infos):
+                        url_map[file_infos[i].mid] = f"{DEFAULT_SIP}{item.purl}"
+        except Exception as e:
+            print(f"[bridge] 获取URL失败: {e}", file=sys.stderr)
+
+    # 组装结果
     out = []
     for s in songs:
         track = track_map.get(s.mid)
@@ -62,9 +85,42 @@ async def search_songs(keyword: str, limit: int = 5):
         })
     return out
 
+async def get_song_url(mid: str):
+    cred = load_cred()
+    api = Client(credential=cred)
+
+    # 获取歌曲详情
+    detail = await api.song.query_song([mid])
+    if not detail.tracks:
+        return {}
+    track = detail.tracks[0]
+
+    # 构建 SongFileInfo
+    if not track.file or not track.file.media_mid:
+        return {}
+
+    file_info = SongFileInfo(
+        mid=track.mid,
+        file_type=SongFileType.MP3_128,
+        song_type=track.type,
+        media_mid=track.file.media_mid
+    )
+
+    # 获取播放链接
+    try:
+        urls_data = await api.song.get_song_urls([file_info], credential=cred)
+        if urls_data.data and urls_data.data[0].purl:
+            return {mid: f"{DEFAULT_SIP}{urls_data.data[0].purl}"}
+    except Exception as e:
+        print(f"[bridge] 获取URL失败: {e}", file=sys.stderr)
+
+    return {}
+
 async def get_fav_songs(limit: int = 20):
     """获取用户收藏的歌曲"""
     cred = load_cred()
+    if not cred:
+        return []
     api = Client(credential=cred)
     musicid = cred.musicid if cred else 0
     euin = str(musicid) if musicid else ""
@@ -89,156 +145,30 @@ async def get_fav_songs(limit: int = 20):
             })
         return out
     except Exception as e:
-        print(f"[bridge] get_fav_songs 失败: {e}", file=sys.stderr)
+        print(f"[bridge] 获取收藏失败: {e}", file=sys.stderr)
         return []
 
-async def get_urls_by_mid(mids_str: str):
-    """根据 mid 获取播放链接"""
-    mids = mids_str.split(",")
-    api = Client(credential=load_cred())
-    detail = await api.song.query_song(mids)
-    tracks = detail.tracks
-    urls_data = await api.song.get_song_urls(tracks)
-    sip = urls_data.sip[0] if hasattr(urls_data, 'sip') and urls_data.sip else "http://ws.stream.qqmusic.qq.com/"
-    out = {}
-    for i, track in enumerate(tracks):
-        purl = urls_data.data[i].purl if i < len(urls_data.data) and urls_data.data[i].purl else ""
-        out[track.mid] = f"{sip}{purl}" if purl else ""
-    return out
-
-async def get_created_songlists():
-    """获取用户自建歌单列表"""
-    cred = load_cred()
-    if not cred or not cred.musicid:
-        return []
-    api = Client(credential=cred)
-    try:
-        result = await api.user.get_created_songlist(cred.musicid)
-        lists = result.list if hasattr(result, 'list') else []
-        return [{"id": l.tid, "name": l.name, "count": l.song_count if hasattr(l, "song_count") else 0} for l in lists]
-    except Exception as e:
-        print(f"[bridge] get_created_songlists 失败: {e}", file=sys.stderr)
-        return []
-
-async def get_fav_songlists(euin: str = "", limit: int = 20):
-    """获取用户收藏的歌单"""
-    cred = load_cred()
-    if not cred:
-        return []
-    api = Client(credential=cred)
-    euin = euin or str(cred.musicid or "")
-    if not euin:
-        return []
-    try:
-        result = await api.user.get_fav_songlist(euin, num=limit)
-        lists = result.list if hasattr(result, 'list') else []
-        return [{"id": l.tid, "name": l.name, "count": l.song_count if hasattr(l, "song_count") else 0} for l in lists]
-    except Exception as e:
-        print(f"[bridge] get_fav_songlists 失败: {e}", file=sys.stderr)
-        return []
-
-async def get_playlist_songs(songlist_id: int, limit: int = 50):
-    """获取歌单中的歌曲"""
-    cred = load_cred()
-    api = Client(credential=cred)
-    try:
-        result = await api.songlist.get_detail(songlist_id, num=limit)
-        songs = result.song_list[:limit] if hasattr(result, 'song_list') else []
-        if not songs:
-            return []
-        mids = [s.mid for s in songs]
-        detail = await api.song.query_song(mids)
-        tracks = detail.tracks
-        track_map = {t.mid: t for t in tracks}
-        out = []
-        for s in songs:
-            track = track_map.get(s.mid)
-            out.append({
-                "mid": s.mid,
-                "title": track.title if track and hasattr(track, "title") else s.name if hasattr(s, "name") else "",
-                "artist": ", ".join(a.name for a in track.singer) if track and hasattr(track, "singer") else "",
-            })
-        return out
-    except Exception as e:
-        print(f"[bridge] get_playlist_songs 失败: {e}", file=sys.stderr)
-        return []
-
-async def get_daily_recommend(limit: int = 10):
-    """获取 QQ 音乐每日推荐歌曲"""
-    cred = load_cred()
-    api = Client(credential=cred)
-    try:
-        result = await api.recommend.get_guess_recommend()
-        songs = result.song[:limit] if hasattr(result, 'song') else []
-        if not songs:
-            return []
-        mids = [s.mid for s in songs]
-        detail = await api.song.query_song(mids)
-        tracks = detail.tracks
-        track_map = {t.mid: t for t in tracks}
-        out = []
-        for s in songs:
-            track = track_map.get(s.mid)
-            out.append({
-                "mid": s.mid,
-                "title": track.title if track and hasattr(track, "title") else s.name,
-                "artist": ", ".join(a.name for a in track.singer) if track and hasattr(track, "singer") else "",
-            })
-        return out
-    except Exception as e:
-        print(f"[bridge] get_daily_recommend 失败: {e}", file=sys.stderr)
-        return []
-
-async def pull_all_taste(limit: int = 30):
-    """一键拉取所有口味数据：收藏歌曲 + 自建歌单 + 收藏歌单 + 每日推荐"""
-    result = {
-        "fav_songs": [],
-        "created_songlists": [],
-        "fav_songlists": [],
-        "all_playlist_songs": [],
-        "daily_recommend": [],
-    }
-
-    # 收藏歌曲
-    result["fav_songs"] = await get_fav_songs(limit)
-
-    # 自建歌单 + 歌单内歌曲
-    created = await get_created_songlists()
-    result["created_songlists"] = created
-    all_playlist_songs = []
-    seen = set()
-    for pl in created[:5]:
-        songs = await get_playlist_songs(pl["id"], 30)
-        for s in songs:
-            key = s.get("mid", "")
-            if key and key not in seen:
-                seen.add(key)
-                all_playlist_songs.append(s)
-    result["all_playlist_songs"] = all_playlist_songs
-
-    # 收藏歌单
-    result["fav_songlists"] = await get_fav_songlists(limit=10)
-
-    # 每日推荐
-    result["daily_recommend"] = await get_daily_recommend(10)
-
-    return result
-
+# CLI 入口
 if __name__ == "__main__":
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "search"
-    if cmd == "search":
-        kw = sys.argv[2] if len(sys.argv) > 2 else "周杰伦"
-        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 3
+    if len(sys.argv) < 2:
+        print("用法: python qq_bridge.py <search|url|fav> [参数...]")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "search" and len(sys.argv) >= 3:
+        kw = sys.argv[2]
+        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 5
         print(json.dumps(asyncio.run(search_songs(kw, limit)), ensure_ascii=False))
-    elif cmd == "url":
-        mids = sys.argv[2] if len(sys.argv) > 2 else ""
-        print(json.dumps(asyncio.run(get_urls_by_mid(mids)), ensure_ascii=False))
-    elif cmd == "fav_songs":
+
+    elif cmd == "url" and len(sys.argv) >= 3:
+        mid = sys.argv[2]
+        print(json.dumps(asyncio.run(get_song_url(mid)), ensure_ascii=False))
+
+    elif cmd == "fav":
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 20
         print(json.dumps(asyncio.run(get_fav_songs(limit)), ensure_ascii=False))
-    elif cmd == "taste":
-        limit = int(sys.argv[2]) if len(sys.argv) > 2 else 30
-        print(json.dumps(asyncio.run(pull_all_taste(limit)), ensure_ascii=False))
-    elif cmd == "daily":
-        limit = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-        print(json.dumps(asyncio.run(get_daily_recommend(limit)), ensure_ascii=False))
+
+    else:
+        print("用法: python qq_bridge.py <search|url|fav> [参数...]")
+        sys.exit(1)
