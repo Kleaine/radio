@@ -84,11 +84,7 @@ export function createContextService(config: ContextConfig): ContextService {
       const parts: string[] = [];
       parts.push(`当前时间：${timeStr}（${timeHint}）`);
 
-      // 天气
-      const weather = await getWeatherText();
-      if (weather) parts.push(`天气：${weather}`);
-
-      // 日程
+      // 日程（比天气更有用）
       const calendar = await getCalendarText();
       if (calendar) parts.push(`今日日程：${calendar}`);
 
@@ -118,6 +114,10 @@ export function createContextService(config: ContextConfig): ContextService {
       // 用户画像（memory 文件）
       const memoryProfile = await getProfileText();
       if (memoryProfile) parts.push(memoryProfile);
+
+      // 天气（放最后，参考用不要每次都说）
+      const weather = await getWeatherText();
+      if (weather) parts.push(`天气（参考，不要每次开场都说）：${weather}`);
 
       // 当前场景
       if (scene) parts.push(`当前场景：${scene}`);
