@@ -200,8 +200,12 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
     "X-Accel-Buffering": "no",
   });
 
+  let aborted = false;
+  req.on("close", () => { aborted = true; });
+
   // 发送 SSE 事件的辅助函数
   const sendEvent = (event: string, data: string) => {
+    if (aborted) return;
     res.write(`event: ${event}\ndata: ${data}\n\n`);
   };
 
@@ -258,11 +262,11 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
   const contextService = buildContextForUser(userId);
 
   try {
-    // 立即告知前端正在处理（模仿 Claude Code 的即时反馈）
     sendEvent("status", "DJ 正在为您准备...");
+    if (aborted) { res.end(); return; }
 
-    // 组装上下文（天气走缓存，首次调用后不再阻塞）
     const context = await contextService.build(message);
+    if (aborted) { res.end(); return; }
 
     // 流式调用 LLM
     let jsonStarted = false;

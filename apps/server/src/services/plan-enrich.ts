@@ -23,6 +23,11 @@ export interface EnrichConfig {
   ttsService?: { synthesize: (text: string, voice?: string) => Promise<string> };
 }
 
+// 模块级编译，避免每次 enrich 都重新编译正则
+const blockedPattern = /第.{1,6}[章节集]|伴奏|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教|抖音|最火.{1,5}首|合集|排行|歌单|听过.{1,3}首|学唱/i;
+const livePattern = /live|现场|演唱会|feat\.|remix/i;
+const normalize = (s: string) => s.replace(/[（(]/g, '(').replace(/[）)]/g, ')').toLowerCase();
+
 /** 把播报计划的 items 逐条增强为可播放项 */
 export async function enrichItems(
   items: PlayableItem[],
@@ -63,13 +68,6 @@ export async function enrichItems(
     try {
       // 多搜几首，排除 Live/现场版/有声书/播客/小说，优先取正式音乐
       const allSongs = await musicService.search(query, 8);
-      // 完全排除：不是音乐的东西
-      const blockedPattern = /第.{1,6}[章节集]|伴奏|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教|抖音|最火.{1,5}首|合集|排行|歌单|听过.{1,3}首|学唱/i;
-      // Live/现场版：录音室版优先，没有也可以用
-      const livePattern = /live|现场|演唱会|feat\.|remix/i;
-      // 优先匹配歌手+歌名都对的正式版
-      // 括号统一化：QQ音乐有时用中文括号，LLM可能输出英文括号
-      const normalize = (s: string) => s.replace(/[（(]/g, '(').replace(/[）)]/g, ')').toLowerCase();
       const normTitle = normalize(title);
       const artistLower = artist.toLowerCase();
       // 歌名+歌手都对 → 录音室版 > Live版，blocked 完全排除

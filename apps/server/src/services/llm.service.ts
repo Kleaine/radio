@@ -95,7 +95,8 @@ function extractJson(text: string): Record<string, any> | null {
 // ── 解析 LLM 回复为 PlanResponse ──
 
 function parsePlan(json: Record<string, any>): PlanResponse {
-  const items: PlayableItem[] = (json.items ?? []).map((item: any) => {
+  const rawItems = Array.isArray(json.items) ? json.items : [];
+  const items: PlayableItem[] = rawItems.map((item: any) => {
     if (item.type === "tts") {
       return { type: "tts", text: item.text ?? "", voice: item.voice ?? undefined };
     }

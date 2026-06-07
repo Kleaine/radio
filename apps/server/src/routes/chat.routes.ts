@@ -47,10 +47,10 @@ function initServices(userId: number) {
   // 获取最近播放记录
   const db = getDb();
   const recentPlays = db.prepare(`
-    SELECT song_title FROM plays
+    SELECT song_title, artist FROM plays
     WHERE user_id = ? AND skipped = 0
     ORDER BY played_at DESC LIMIT 10
-  `).all(userId).map((r: any) => r.song_title);
+  `).all(userId).map((r: any) => ({ title: r.song_title, artist: r.artist }));
 
   const recentSkips = db.prepare(`
     SELECT song_title FROM plays
@@ -58,12 +58,25 @@ function initServices(userId: number) {
     ORDER BY played_at DESC LIMIT 5
   `).all(userId).map((r: any) => r.song_title);
 
+  const topArtists = db.prepare(`
+    SELECT artist, COUNT(*) as cnt FROM plays
+    WHERE user_id = ? AND skipped = 0 AND artist != ''
+    GROUP BY artist ORDER BY cnt DESC LIMIT 10
+  `).all(userId).map((r: any) => r.artist);
+
+  // AI 记忆从文件读取
+  const aiMemoryPath = path.resolve(__dirname, "..", "..", "..", "..", "user", "last_ai_message.txt");
+  let lastAiOpening = "";
+  try { lastAiOpening = fs.readFileSync(aiMemoryPath, "utf-8").trim(); } catch {}
+
   const contextService = createContextService({
     weatherService,
     calendarService,
     memoryWriter,
     recentPlays,
     recentSkips,
+    topArtists,
+    lastAiOpening,
   });
 
   const llmService = createLlmService({
