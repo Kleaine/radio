@@ -770,12 +770,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPrev = () => { if (currentQueueIndex > 0) playQueueItem(currentQueueIndex - 1); };
     const playNext = () => {
         if (currentQueueIndex < playQueue.length - 1) {
-            // 队列还有歌，直接切——秒切，不走 AI
             playQueueItem(currentQueueIndex + 1);
         } else {
-            // 停当前歌，请求 AI（串词会先播，不用干等）
             audioPlayer.pause();
-            if (_fetchingNext) return;
             _fetchingNext = true;
             recordStatus.textContent = '正在为您准备...';
             sendTextDispatch('继续', true);
