@@ -534,35 +534,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isRecommend = /推荐/.test(_lastUserMessage);
 
-        // 正在播放 + 新计划来了 → 追加渲染卡片
+        // 正在播放 + 新计划来了 → 只入队，不渲染（等自然切歌时逐个出现）
         if (_isPlaying && !isRecommend) {
             _fetchingNext = false;
-            resetAllCardButtons();
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
-                if (item.type === 'tts') {
-                    const ttsDiv = document.createElement('div');
-                    ttsDiv.className = 'tts-card';
-                    ttsDiv.textContent = item.text || '';
-                    container.appendChild(ttsDiv);
-                } else if (item.type === 'song') {
-                    const d = document.createElement('div');
-                    d.innerHTML = renderSongCard(item);
-                    container.appendChild(d);
-                    if (item.audioUrl) {
-                        let prevTtsUrl = '', prevTtsText = '';
-                        for (let j = i - 1; j >= 0; j--) {
-                            if (items[j].type === 'tts' && items[j].ttsAudioUrl) {
-                                prevTtsUrl = items[j].ttsAudioUrl;
-                                prevTtsText = items[j].text || '';
-                                break;
-                            }
+                if (item.type === 'song' && item.audioUrl) {
+                    let prevTtsUrl = '', prevTtsText = '';
+                    for (let j = i - 1; j >= 0; j--) {
+                        if (items[j].type === 'tts' && items[j].ttsAudioUrl) {
+                            prevTtsUrl = items[j].ttsAudioUrl;
+                            prevTtsText = items[j].text || '';
+                            break;
                         }
-                        addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`, prevTtsUrl, prevTtsText);
                     }
+                    addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`, prevTtsUrl, prevTtsText);
                 }
             }
-            scrollToBottom();
             return;
         }
 
@@ -733,15 +721,20 @@ document.addEventListener('DOMContentLoaded', () => {
         currentQueueIndex = index;
         const item = playQueue[index];
 
-        // 找到新卡片
-        const allCards = document.querySelectorAll('.song-card');
-        for (const card of allCards) {
-            if (card.getAttribute('data-audio-url') === item.url) {
-                currentPlayingCard = card;
-                const btn = card.querySelector('.song-play-btn');
-                if (btn) btn.textContent = '⏸';
-                break;
-            }
+        // 找到或创建卡片
+        let card = document.querySelector(`.song-card[data-audio-url="${item.url.replace(/"/g, '\\"')}"]`);
+        if (!card && item.desc) {
+            const nameMatch = item.desc.match(/《(.+?)》.*-(.+)/);
+            const d = document.createElement('div');
+            d.innerHTML = renderSongCard({ title: nameMatch?.[1] || '', artist: (nameMatch?.[2] || '').trim(), audioUrl: item.url });
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) { chatBox.appendChild(d.firstElementChild); scrollToBottom(); }
+            card = document.querySelector(`.song-card[data-audio-url="${item.url.replace(/"/g, '\\"')}"]`);
+        }
+        if (card) {
+            currentPlayingCard = card;
+            const btn = card.querySelector('.song-play-btn');
+            if (btn) btn.textContent = '⏸';
         }
 
         // 先播串词 TTS
