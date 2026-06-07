@@ -45,8 +45,17 @@ function callBridge(subcmd: string, arg: string): Promise<any> {
   });
 }
 
-// ── URL 预缓存 ──
+// ── URL 预缓存（最多 200 条，超了清最旧的）──
 const urlCache = new Map<string, string>();
+const MAX_CACHE = 200;
+
+function cacheSet(mid: string, url: string) {
+  if (urlCache.size >= MAX_CACHE) {
+    const first = urlCache.keys().next().value;
+    if (first) urlCache.delete(first);
+  }
+  urlCache.set(mid, url);
+}
 
 export async function preWarmUrls(mids: string[]): Promise<void> {
   const uncached = mids.filter(m => !urlCache.has(m));
@@ -57,7 +66,7 @@ export async function preWarmUrls(mids: string[]): Promise<void> {
     if (urls && typeof urls === "object") {
       for (const [mid, url] of Object.entries(urls)) {
         if (url && typeof url === "string") {
-          urlCache.set(mid, url);
+          cacheSet(mid, url);
         }
       }
     }
@@ -80,7 +89,7 @@ audioRoutes.get("/audio", async (req: Request, res: Response) => {
     if (!qqUrl) {
       const urls = await callBridge("url", mid);
       qqUrl = urls?.[mid];
-      if (qqUrl) urlCache.set(mid, qqUrl);
+      if (qqUrl) cacheSet(mid, qqUrl);
     }
     if (!qqUrl) {
       res.status(404).json({ error: "无法获取播放链接" });
