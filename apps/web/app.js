@@ -362,7 +362,10 @@ document.addEventListener('DOMContentLoaded', () => {
         textInput.disabled = true;
         recordStatus.textContent = 'AI 思考中...';
 
-        if (!silent) appendUserMessage(text);
+        if (!silent) {
+            appendUserMessage(text);
+            _autoContinue = false; // 用户主动发消息，关自动续播
+        }
         _lastUserMessage = silent ? _lastUserMessage : text;
 
         // 创建系统消息气泡，用于流式追加
@@ -502,6 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ================= 10. PlanResponse items[] 渲染与播放队列 =================
     let _lastUserMessage = '';
     let _isPlaying = false;
+    let _autoContinue = true;
     let _pendingItems = []; // 预生成的待播项
 
     const playPlanItems = async (items, container) => {
@@ -592,31 +596,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         addToPlayQueue('song', item.audioUrl, desc, prevTtsUrl, prevTtsText);
                         currentQueueIndex = playQueue.length - 1;
-                        // 重置旧卡片按钮
-                        if (currentPlayingCard) {
-                            const oldBtn = currentPlayingCard.querySelector('.song-play-btn');
-                            if (oldBtn) oldBtn.textContent = '▶';
-                        }
+                        resetAllCardButtons();
                         currentPlayingCard = d.querySelector('.song-card');
+                        if (currentPlayingCard) {
+                            const btn = currentPlayingCard.querySelector('.song-play-btn');
+                            if (btn) btn.textContent = '⏸';
+                        }
                         fetch('/api/player/report-play', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
                         }).catch(() => {});
-                        // 播到倒数第二首时，后台静默预生成下一轮
-                        const songCount = items.filter(it => it.type === 'song').length;
-                        const currentSongIdx = items.slice(0, i + 1).filter(it => it.type === 'song').length;
-                        if (currentSongIdx >= songCount - 1) {
-                            sendTextDispatch('继续', true);
-                        }
                         await playAudio(item.audioUrl, desc);
                     }
                 }
             }
         }
 
+        // 本批播完，如果用户没打断就自动续
         _isPlaying = false;
         resetUI();
+        if (_autoContinue) {
+            _autoContinue = true; // 续播不打断自己
+            sendTextDispatch('继续', true);
+        }
     };
 
     const playAudio = (url, desc) => {
@@ -740,6 +743,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 playQueueItem(currentQueueIndex + 1);
             }
         };
+    };
+
+    // 全局重置：所有卡片按钮变 ▶
+    const resetAllCardButtons = () => {
+        document.querySelectorAll('.song-play-btn').forEach(btn => { btn.textContent = '▶'; });
     };
 
     const playPrev = () => { if (currentQueueIndex > 0) playQueueItem(currentQueueIndex - 1); };
