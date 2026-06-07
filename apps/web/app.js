@@ -507,12 +507,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const isRecommend = /推荐/.test(_lastUserMessage);
 
         if (isRecommend) {
-            // ── 推荐模式：一次性渲染所有卡片，只播开场白，用户自己选歌 ──
+            // ── 推荐模式：一次性渲染所有卡片，用户自己选歌 ──
             let pendingTtsText = '';
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 if (item.type === 'tts') {
-                    if (i === 0) continue;
                     pendingTtsText = item.text || '';
                 } else if (item.type === 'song') {
                     if (pendingTtsText) {
@@ -528,22 +527,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             scrollToBottom();
-            // 只播开场白
-            const firstTTS = items.find(i => i.type === 'tts' && i.ttsAudioUrl);
-            if (firstTTS) await playAudio(firstTTS.ttsAudioUrl, firstTTS.text || 'DJ 播报');
         } else {
             // ── 电台模式：逐首渲染，逐首播放，像真正的电台 ──
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 if (item.type === 'tts') {
-                    // 播 TTS，但第一段开场白不渲染（已流式显示）
-                    if (i > 0) {
-                        const ttsDiv = document.createElement('div');
-                        ttsDiv.className = 'tts-card';
-                        ttsDiv.textContent = item.text || '';
-                        container.appendChild(ttsDiv);
-                        scrollToBottom();
-                    }
+                    // 所有 TTS 都渲染——开场白已从 items 移除，现在 tts 都是歌曲串词
+                    const ttsDiv = document.createElement('div');
+                    ttsDiv.className = 'tts-card';
+                    ttsDiv.textContent = item.text || '';
+                    container.appendChild(ttsDiv);
+                    scrollToBottom();
                     if (item.ttsAudioUrl) {
                         await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
                     }
@@ -597,6 +591,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     djInfoTitle.textContent = '正在播放';
                     djInfoDesc.textContent = desc;
                     recordStatus.textContent = '播放中...';
+                    if (currentPlayingCard) {
+                        const btn = currentPlayingCard.querySelector('.song-play-btn');
+                        if (btn) btn.textContent = '⏸';
+                    }
                 })
                 .catch(() => {});
             audioPlayer.onended = resolve;
@@ -718,24 +716,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cur) cur.textContent = formatTime(audioPlayer.currentTime);
     };
 
-    // 事件委托：歌曲卡片内的播放/上一首/下一首按钮
+    // 事件委托：歌曲卡片内的播放/上一首/下一首/进度条
     chatBox.addEventListener('click', (e) => {
+        // 进度条拖拽
+        const progressBar = e.target.closest('.song-progress-bar');
+        if (progressBar && audioPlayer.duration > 0) {
+            const rect = progressBar.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            audioPlayer.currentTime = pct * audioPlayer.duration;
+            return;
+        }
+        // 播放按钮
         const playBtn = e.target.closest('.song-play-btn');
         if (playBtn) {
             const url = playBtn.getAttribute('data-url');
             if (url) {
                 const card = playBtn.closest('.song-card');
                 currentPlayingCard = card;
-                audioPlayer.src = url;
-                audioPlayer.play().then(() => {
-                    playBtn.textContent = '⏸';
-                    djInfoTitle.textContent = '正在播放';
-                    recordStatus.textContent = '播放中...';
-                }).catch(() => {});
+                // 如果正在播同一首歌，就暂停/继续
+                if (audioPlayer.src.includes(url) && !audioPlayer.paused) {
+                    audioPlayer.pause();
+                    playBtn.textContent = '▶';
+                } else if (audioPlayer.src.includes(url) && audioPlayer.paused) {
+                    audioPlayer.play().then(() => { playBtn.textContent = '⏸'; }).catch(() => {});
+                } else {
+                    audioPlayer.src = url;
+                    audioPlayer.play().then(() => {
+                        playBtn.textContent = '⏸';
+                        djInfoTitle.textContent = '正在播放';
+                        recordStatus.textContent = '播放中...';
+                    }).catch(() => {});
+                }
                 // 上报播放记录
                 const titleEl = card?.querySelector('.title');
                 const artistEl = card?.querySelector('.artist');
-                if (titleEl) {
+                if (titleEl && !audioPlayer.src.includes(url)) {
                     fetch('/api/player/report-play', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ title: titleEl.textContent, artist: artistEl?.textContent || '' })
