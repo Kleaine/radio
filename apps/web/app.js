@@ -760,10 +760,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // 队列还有歌，直接切——秒切，不走 AI
             playQueueItem(currentQueueIndex + 1);
         } else {
-            // 队列空了，不暂停——当前歌继续放，后台请求 AI
+            // 停当前歌，请求 AI（串词会先播，不用干等）
+            audioPlayer.pause();
             if (_fetchingNext) return;
             _fetchingNext = true;
-            recordStatus.textContent = '正在为您准备下一首...';
+            recordStatus.textContent = '正在为您准备...';
             sendTextDispatch('继续', true);
         }
     };
