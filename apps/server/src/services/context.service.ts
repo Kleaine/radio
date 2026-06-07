@@ -115,9 +115,9 @@ export function createContextService(config: ContextConfig): ContextService {
         parts.push(`最近跳过（不要再推）：${config.recentSkips.join("、")}`);
       }
 
-      // 用户画像
-      const profile = await getProfileText();
-      if (profile) parts.push(profile);
+      // 用户画像（memory 文件）
+      const memoryProfile = await getProfileText();
+      if (memoryProfile) parts.push(memoryProfile);
 
       // 当前场景
       if (scene) parts.push(`当前场景：${scene}`);

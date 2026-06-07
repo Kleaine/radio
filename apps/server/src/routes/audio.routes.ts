@@ -61,18 +61,19 @@ export async function preWarmUrls(mids: string[]): Promise<void> {
   const uncached = mids.filter(m => !urlCache.has(m));
   if (uncached.length === 0) return;
 
-  try {
-    const urls = await callBridge("url", uncached.join(","));
-    if (urls && typeof urls === "object") {
-      for (const [mid, url] of Object.entries(urls)) {
-        if (url && typeof url === "string") {
-          cacheSet(mid, url);
+  // 逐个查询，避免桥接只支持单个 mid 的问题
+  const results = await Promise.allSettled(
+    uncached.map(async (mid) => {
+      try {
+        const urls = await callBridge("url", mid);
+        if (urls && typeof urls === "object" && urls[mid]) {
+          cacheSet(mid, urls[mid]);
         }
+      } catch (err: any) {
+        console.error(`[audio] 预缓存失败 ${mid}:`, err.message);
       }
-    }
-  } catch (err: any) {
-    console.error("[audio] 预缓存失败:", err.message);
-  }
+    })
+  );
 }
 
 // GET /api/audio?mid=xxx — 透传模式：服务器拉音频，浏览器直接收
