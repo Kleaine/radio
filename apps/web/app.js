@@ -501,13 +501,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ================= 10. PlanResponse items[] 渲染与播放队列 =================
     let _lastUserMessage = '';
-    let _isPlaying = false; // 互斥锁：防止多个 playPlanItems 同时跑
+    let _isPlaying = false;
+    let _pendingItems = []; // 预生成的待播项
+
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
-        if (_isPlaying) return; // 正在播，跳过
-        _isPlaying = true;
 
         const isRecommend = /推荐/.test(_lastUserMessage);
+
+        // 正在播放 + 新计划来了 → 追加到待播队列，只渲染卡片不打断
+        if (_isPlaying && !isRecommend) {
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.type === 'tts') {
+                    const ttsDiv = document.createElement('div');
+                    ttsDiv.className = 'tts-card';
+                    ttsDiv.textContent = item.text || '';
+                    container.appendChild(ttsDiv);
+                } else if (item.type === 'song') {
+                    const d = document.createElement('div');
+                    d.innerHTML = renderSongCard(item);
+                    container.appendChild(d);
+                    if (item.audioUrl) {
+                        let prevTtsUrl = '', prevTtsText = '';
+                        for (let j = i - 1; j >= 0; j--) {
+                            if (items[j].type === 'tts' && items[j].ttsAudioUrl) {
+                                prevTtsUrl = items[j].ttsAudioUrl;
+                                prevTtsText = items[j].text || '';
+                                break;
+                            }
+                        }
+                        addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`, prevTtsUrl, prevTtsText);
+                    }
+                }
+            }
+            scrollToBottom();
+            return;
+        }
+
+        _isPlaying = true;
 
         if (isRecommend) {
             // ── 推荐模式：一次性渲染所有卡片，用户自己选歌 ──
@@ -531,11 +563,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             scrollToBottom();
         } else {
-            // ── 电台模式：逐首渲染，逐首播放，像真正的电台 ──
+            // ── 电台模式：逐首渲染，逐首播放 ──
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 if (item.type === 'tts') {
-                    // 所有 TTS 都渲染——开场白已从 items 移除，现在 tts 都是歌曲串词
                     const ttsDiv = document.createElement('div');
                     ttsDiv.className = 'tts-card';
                     ttsDiv.textContent = item.text || '';
@@ -545,14 +576,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
                     }
                 } else if (item.type === 'song') {
-                    // 渲染卡片 + 播放
                     const d = document.createElement('div');
                     d.innerHTML = renderSongCard(item);
                     container.appendChild(d);
                     scrollToBottom();
                     if (item.audioUrl) {
                         const desc = `🎵 《${item.title}》 - ${item.artist}`;
-                        // 找这首歌前面的串词 TTS
                         let prevTtsUrl = '', prevTtsText = '';
                         for (let j = i - 1; j >= 0; j--) {
                             if (items[j].type === 'tts' && items[j].ttsAudioUrl) {

@@ -170,23 +170,24 @@ radio/
 ### 2026-06-07 — @Kleaine
 
 **审计修复**
-- `chat.routes.ts` — 修复 recentPlays 类型损坏导致个性化失效
-- `dispatch.routes.ts` — SSE 断连保护（客户端关闭不浪费 API 配额）
-- `audio.routes.ts` — URL 缓存上限 200 条防止内存泄漏
-- `plan-enrich.ts` — 正则提到模块级避免重复编译
+- `chat.routes.ts` — 修复 recentPlays 类型损坏 + 加 topArtists + AI 记忆
+- `dispatch.routes.ts` — SSE 断连保护 + recordPlay 接入口味画像
+- `audio.routes.ts` — URL 缓存上限 200 条
+- `plan-enrich.ts` — 正则提到模块级，避免重复编译
 - `llm.service.ts` — items 非数组防御检查
+- `scheduler/index.ts` — TTS 文件每小时清理超过 24h 的旧 WAV
 
 **个性化推荐**
-- `profile.service.ts` — 新建，动态口味画像：每次播歌累积歌手权重，持久化 `user/profile.json`
-- `context.service.ts` — 口味画像 + 推荐策略（70%偏好+30%惊喜）
+- `profile.service.ts` — 新建，动态口味画像：每次播歌累积歌手权重，`user/profile.json` 持久化，profile 空时用 DB topArtists 兜底
+- `context.service.ts` — 口味画像 + 70%偏好 30%惊喜推荐策略
 
 **音频代理**
-- `audio.routes.ts` — 从 302 重定向改为透传+302 兜底双保险
+- `audio.routes.ts` — 透传+302 兜底双保险
 
 **前端**
-- 卡片等比例微缩 + DJ 头像中间值 + 进度条可点击跳转
-- 播放互斥锁 + 切歌时新旧卡片状态同步
-- 下一首秒切 + 队列空时静默续播
+- 卡片等比例微缩 + DJ 头像中间值 + 进度条点击跳转 + 播放暂停切换
+- 预生成新计划不再被锁丢弃，改为追加到队列末尾
+- 登录页副标题改为"你的私人 AI 音乐电台"
 
 ### 2026-06-07 — @hyd2005
 
