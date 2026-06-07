@@ -501,8 +501,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ================= 10. PlanResponse items[] 渲染与播放队列 =================
     let _lastUserMessage = '';
+    let _isPlaying = false; // 互斥锁：防止多个 playPlanItems 同时跑
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
+        if (_isPlaying) return; // 正在播，跳过
+        _isPlaying = true;
 
         const isRecommend = /推荐/.test(_lastUserMessage);
 
@@ -578,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        _isPlaying = false;
         resetUI();
     };
 
