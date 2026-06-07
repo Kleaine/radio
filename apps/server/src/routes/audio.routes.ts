@@ -87,27 +87,25 @@ audioRoutes.get("/audio", async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. 从 QQ 音乐拉音频
-    const audioRes = await fetch(qqUrl, { signal: AbortSignal.timeout(30000) });
-    if (!audioRes.ok) {
-      res.status(502).json({ error: "QQ 音乐返回错误" });
-      return;
+    // 2. 透传模式，失败则 302 兜底
+    try {
+      const audioRes = await fetch(qqUrl, { signal: AbortSignal.timeout(15000) });
+      if (!audioRes.ok) throw new Error("fetch failed");
+      const buffer = Buffer.from(await audioRes.arrayBuffer());
+      let contentType = "audio/mpeg";
+      if (buffer.length >= 4) {
+        const magic = buffer.toString("ascii", 0, 4);
+        if (magic === "fLaC") contentType = "audio/flac";
+        else if (magic === "OggS") contentType = "audio/ogg";
+      }
+      res.header("Content-Type", contentType);
+      res.header("Accept-Ranges", "bytes");
+      res.header("Content-Length", String(buffer.length));
+      res.header("Cache-Control", "public, max-age=3600");
+      res.send(buffer);
+    } catch {
+      res.redirect(302, qqUrl);
     }
-
-    // 3. 读取并透传（检测格式）
-    const buffer = Buffer.from(await audioRes.arrayBuffer());
-    let contentType = "audio/mpeg";
-    if (buffer.length >= 4) {
-      const magic = buffer.toString("ascii", 0, 4);
-      if (magic === "fLaC") contentType = "audio/flac";
-      else if (magic === "OggS") contentType = "audio/ogg";
-    }
-
-    res.header("Content-Type", contentType);
-    res.header("Accept-Ranges", "bytes");
-    res.header("Content-Length", String(buffer.length));
-    res.header("Cache-Control", "public, max-age=3600");
-    res.send(buffer);
   } catch (err: any) {
     console.error("[audio] 代理失败:", err.message);
     res.status(500).json({ error: "音频代理失败" });
