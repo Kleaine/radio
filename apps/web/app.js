@@ -592,6 +592,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         addToPlayQueue('song', item.audioUrl, desc, prevTtsUrl, prevTtsText);
                         currentQueueIndex = playQueue.length - 1;
+                        // 重置旧卡片按钮
+                        if (currentPlayingCard) {
+                            const oldBtn = currentPlayingCard.querySelector('.song-play-btn');
+                            if (oldBtn) oldBtn.textContent = '▶';
+                        }
                         currentPlayingCard = d.querySelector('.song-card');
                         fetch('/api/player/report-play', {
                             method: 'POST',
