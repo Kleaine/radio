@@ -506,6 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let _lastUserMessage = '';
     let _isPlaying = false;
     let _autoContinue = true;
+    let _fetchingNext = false; // 防双重请求
     let _pendingItems = []; // 预生成的待播项
 
     const playPlanItems = async (items, container) => {
@@ -515,6 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 正在播放 + 新计划来了 → 追加到待播队列，只渲染卡片不打断
         if (_isPlaying && !isRecommend) {
+            _fetchingNext = false;
             for (let i = 0; i < items.length; i++) {
                 const item = items[i];
                 if (item.type === 'tts') {
@@ -615,9 +617,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 本批播完，如果用户没打断就自动续
         _isPlaying = false;
+        _fetchingNext = false;
         resetUI();
         if (_autoContinue) {
-            _autoContinue = true; // 续播不打断自己
+            _autoContinue = true;
+            _fetchingNext = true;
             sendTextDispatch('继续', true);
         }
     };
@@ -756,10 +760,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 队列还有歌，直接切——秒切，不走 AI
             playQueueItem(currentQueueIndex + 1);
         } else {
-            // 队列空了，后台静默请求 AI 生成
-            audioPlayer.pause();
-            playQueue = [];
-            currentQueueIndex = -1;
+            // 队列空了，不暂停——当前歌继续放，后台请求 AI
+            if (_fetchingNext) return;
+            _fetchingNext = true;
             recordStatus.textContent = '正在为您准备下一首...';
             sendTextDispatch('继续', true);
         }
