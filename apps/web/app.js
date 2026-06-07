@@ -663,12 +663,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPrev = () => { if (currentQueueIndex > 0) playQueueItem(currentQueueIndex - 1); };
     const playNext = () => {
         if (currentQueueIndex < playQueue.length - 1) {
+            // 队列还有歌，直接切——秒切，不走 AI
             playQueueItem(currentQueueIndex + 1);
         } else {
-            // 队列播完了，静默请求 AI 生成下一轮（不显示"继续"在聊天框）
+            // 队列空了，后台静默请求 AI 生成
             audioPlayer.pause();
             playQueue = [];
             currentQueueIndex = -1;
+            recordStatus.textContent = '正在为您准备下一首...';
             sendTextDispatch('继续', true);
         }
     };
