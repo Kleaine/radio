@@ -552,12 +552,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     container.appendChild(d);
                     scrollToBottom();
                     if (item.audioUrl) {
+                        const desc = `🎵 《${item.title}》 - ${item.artist}`;
+                        addToPlayQueue(item.audioUrl, desc);
+                        currentQueueIndex = playQueue.length - 1;
+                        currentPlayingCard = d.querySelector('.song-card');
                         fetch('/api/player/report-play', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
                         }).catch(() => {});
-                        await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
+                        await playAudio(item.audioUrl, desc);
                     }
                 }
             }
@@ -649,7 +653,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const playPrev = () => { if (currentQueueIndex > 0) playQueueItem(currentQueueIndex - 1); };
-    const playNext = () => { if (currentQueueIndex < playQueue.length - 1) playQueueItem(currentQueueIndex + 1); };
+    const playNext = () => {
+        if (currentQueueIndex < playQueue.length - 1) {
+            playQueueItem(currentQueueIndex + 1);
+        } else {
+            // 队列播完了，跳过当前歌，自动要下一轮
+            audioPlayer.pause();
+            textInput.value = '下一首';
+            textSendBtn.click();
+        }
+    };
 
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60);
