@@ -70,17 +70,17 @@ const SEARCH_PATTERNS = [
   { regex: /^(.+)的歌$/, group: 1 },
 ];
 
-// 检查是否匹配搜索 — 只匹配明确的歌名/歌手，分类词走 AI
+// 检查是否匹配搜索 — 只匹配极简歌名/歌手指令
 function matchSearch(message: string): string | null {
+  // 带标点、超过10字、不是以"播放/搜索/找/来首/听"开头的都走 AI
   if (/[，。,！？、《》]/.test(message)) return null;
-  // 分类词/模糊词不走搜索：外语歌、安静的歌、摇滚、民谣 等
-  if (/外语|安静|摇滚|民谣|流行|古典|电子|嘻哈|爵士|R&B|说唱|古风|轻音乐|睡前|运动|开车|学习|治愈/.test(message)) return null;
 
   for (const { regex, group } of SEARCH_PATTERNS) {
     const match = message.match(regex);
     if (match?.[group]) {
       const kw = match[group].trim();
-      if (kw.length <= 10) return kw;
+      // 超短关键词（≤8字）且不含"的歌/的歌单"等才走搜索
+      if (kw.length <= 8 && !/的歌$|歌单|合集|综艺|节目/.test(kw)) return kw;
     }
   }
   return null;
@@ -221,10 +221,16 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
   if (searchKeyword) {
     try {
       const songs = await getMusicService().search(searchKeyword, 10);
+      // 预验证：只返回有播放链接的歌曲
+      const mids = songs.map(s => s.id).filter(Boolean);
+      if (mids.length > 0) {
+        await preWarmUrls(mids);
+      }
+      const playable = songs.filter(s => s.id);
       sendEvent("done", JSON.stringify({
         type: "search",
         keyword: searchKeyword,
-        results: songs.map(s => ({
+        results: playable.map(s => ({
           id: s.id,
           title: s.title,
           artist: s.artist,
