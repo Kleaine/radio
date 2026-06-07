@@ -59,7 +59,7 @@ const COMMAND_PATTERNS = [
   { regex: /下一首|切歌|next|skip/i, action: "next" },
   { regex: /上一首|previous|prev/i, action: "prev" },
   { regex: /^暂停$|^pause$/i, action: "pause" },
-  { regex: /^播放$|^play$|^继续$|^resume$/i, action: "play" },
+  { regex: /^播放$|^play$|^resume$/i, action: "play" },
   { regex: /随机|shuffle/i, action: "shuffle" },
   { regex: /循环|单曲循环|repeat/i, action: "repeat" },
 ];
