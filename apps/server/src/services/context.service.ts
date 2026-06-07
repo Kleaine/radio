@@ -92,11 +92,13 @@ export function createContextService(config: ContextConfig): ContextService {
       const calendar = await getCalendarText();
       if (calendar) parts.push(`今日日程：${calendar}`);
 
-      // 动态口味画像（从播放记录累积统计）
+      // 口味画像：profile.json（长期累积）+ 数据库 Top 歌手（兜底）
       const profile = getProfileSummary();
-      if (profile) parts.push(profile);
-
-      // 推荐策略
+      if (profile) {
+        parts.push(profile);
+      } else if (config.topArtists?.length) {
+        parts.push(`常听歌手：${config.topArtists.slice(0, 10).join("、")}`);
+      }
       parts.push("推荐策略：70%基于口味推荐，30%推荐没听过但风格相近的好歌");
 
       // AI 上一次的回复——避免重复
