@@ -16,6 +16,7 @@ import { createCalendarService } from "../services/calendar.service";
 import { createMemoryWriter } from "../services/memory-writer";
 import { MockMusicService, QQMusicService } from "../services/music.service";
 import { enrichItems } from "../services/plan-enrich";
+import { recordPlay } from "../services/profile.service";
 import { preWarmUrls } from "./audio.routes";
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
@@ -317,7 +318,7 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       await getCalendarService().updateEvents(plan.schedule);
     }
 
-    // 记录播放历史
+    // 记录播放历史 + 更新口味画像
     if (userId) {
       const db = getDb();
       for (const item of enrichedItems) {
@@ -326,6 +327,7 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
             INSERT INTO plays (user_id, song_id, song_title, artist)
             VALUES (?, ?, ?, ?)
           `).run(userId, item.songId || "", item.title, item.artist);
+          if (item.artist) recordPlay(item.artist);
         }
       }
     }
