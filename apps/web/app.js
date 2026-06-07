@@ -364,7 +364,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!silent) {
             appendUserMessage(text);
-            _autoContinue = false; // 用户主动发消息，关自动续播
+            _autoContinue = false;
+            _fetchingNext = false;
         }
         _lastUserMessage = silent ? _lastUserMessage : text;
 
@@ -546,6 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         _isPlaying = true;
+        _fetchingNext = false;
 
         if (isRecommend) {
             // ── 推荐模式：一次性渲染所有卡片，用户自己选歌 ──
@@ -615,11 +617,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 本批播完，如果用户没打断就自动续
+        // 本批播完，如果没有已经在请求中，自动续
         _isPlaying = false;
-        _fetchingNext = false;
         resetUI();
-        if (_autoContinue) {
+        if (_autoContinue && !_fetchingNext) {
             _autoContinue = true;
             _fetchingNext = true;
             sendTextDispatch('继续', true);
