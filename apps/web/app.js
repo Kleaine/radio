@@ -737,7 +737,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btn) btn.textContent = '⏸';
         }
 
-        // 先播串词 TTS
+        // 先出串词文字卡片 + 播 TTS
+        if (item.ttsText) {
+            const ttsDiv = document.createElement('div');
+            ttsDiv.className = 'tts-card';
+            ttsDiv.textContent = item.ttsText;
+            const chatBox = document.getElementById('chat-box');
+            if (chatBox) { chatBox.appendChild(ttsDiv); scrollToBottom(); }
+        }
         if (item.ttsUrl) {
             await new Promise((resolve) => {
                 audioPlayer.src = item.ttsUrl;
@@ -774,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
             playQueueItem(currentQueueIndex + 1);
         } else {
             audioPlayer.pause();
+            resetAllCardButtons();
             _fetchingNext = true;
             recordStatus.textContent = '正在为您准备...';
             sendTextDispatch('继续', true);
