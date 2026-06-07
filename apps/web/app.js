@@ -357,13 +357,13 @@ document.addEventListener('DOMContentLoaded', () => {
         scrollToBottom();
     };
 
-    const sendTextDispatch = async (text) => {
+    const sendTextDispatch = async (text, silent = false) => {
         textSendBtn.disabled = true;
         textInput.disabled = true;
         recordStatus.textContent = 'AI 思考中...';
 
-        appendUserMessage(text);
-        _lastUserMessage = text;
+        if (!silent) appendUserMessage(text);
+        _lastUserMessage = silent ? _lastUserMessage : text;
 
         // 创建系统消息气泡，用于流式追加
         const sDiv = document.createElement('div');
@@ -563,15 +563,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
                         }).catch(() => {});
-                        // 播到倒数第二首时，后台预生成下一轮
+                        // 播到倒数第二首时，后台静默预生成下一轮
                         const songCount = items.filter(it => it.type === 'song').length;
                         const currentSongIdx = items.slice(0, i + 1).filter(it => it.type === 'song').length;
                         if (currentSongIdx >= songCount - 1) {
-                            fetch('/api/dispatch', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localToken}` },
-                                body: JSON.stringify({ message: '继续', voice: currentVoice })
-                            }).catch(() => {});
+                            sendTextDispatch('继续', true);
                         }
                         await playAudio(item.audioUrl, desc);
                     }
@@ -669,15 +665,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentQueueIndex < playQueue.length - 1) {
             playQueueItem(currentQueueIndex + 1);
         } else {
-            // 队列播完了，请求 AI 生成下一轮
+            // 队列播完了，静默请求 AI 生成下一轮（不显示"继续"在聊天框）
             audioPlayer.pause();
             playQueue = [];
             currentQueueIndex = -1;
-            // 用空字符串触发 sendTextDispatch，它内部会发 /api/dispatch
-            const origText = textInput.value;
-            textInput.value = '继续';
-            textSendBtn.click();
-            textInput.value = origText;
+            sendTextDispatch('继续', true);
         }
     };
 
