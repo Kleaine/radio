@@ -19,21 +19,27 @@
 ## 快速开始
 
 ```bash
-# 1. 后端
+# 1. 安装依赖（首次）
 cd apps/server
 npm install
-cp .env.example .env   # 编辑填入 DOUBAO_API_KEY
-npm run dev             # → http://localhost:3000
+cp .env.example .env
+# 编辑 .env，必须填入 DOUBAO_API_KEY
 
-# 2. (可选) QQ音乐登录
+# 2. 启动后端
+npx tsx src/index.ts
+# → http://localhost:3000
+
+# 3. (可选) QQ音乐扫码登录（才能播放真实歌曲）
+cd ../..
 python data/qq_login.py
+# 用 QQ 扫描生成的二维码图片
 
-# 3. (可选) TTS 语音
+# 4. (可选) 启动 TTS 语音服务
 cd apps/tts
 .\scripts\run_tts_service.ps1
 ```
 
-浏览器打开 `http://localhost:3000`，注册登录即可使用。
+浏览器打开 `http://localhost:3000`，注册账号登录后即可使用。
 
 ---
 
