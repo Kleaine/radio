@@ -266,14 +266,16 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
     sendEvent("status", "DJ 正在为您准备...");
     if (aborted) { res.end(); return; }
 
-    const context = await contextService.build(message);
+    // "继续" = 续播不是新对话
+    const effectiveMsg = message === "继续" ? "继续放歌，直接推荐歌曲，不要开场白" : message;
+    const context = await contextService.build(effectiveMsg);
     if (aborted) { res.end(); return; }
 
     // 流式调用 LLM
     let jsonStarted = false;
     const plan = await getLlmService().generatePlanStream(
       "manual",
-      message,
+      effectiveMsg,
       context,
       (chunk: string) => {
         if (!jsonStarted) {
