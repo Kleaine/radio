@@ -379,9 +379,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (line.startsWith('data:')) {
                         const data = line.slice(5).trim();
                         if (currentEvent === 'chunk') {
-                            // 流式文字只显示在状态栏，不在聊天气泡中累积
-                            // DJ 完整文字通过 TTS 卡片展示，避免重复
-                            recordStatus.textContent = 'DJ 正在播报: ' + data.slice(-30);
+                            contentDiv.textContent += data;
+                            scrollToBottom();
+                            recordStatus.textContent = 'DJ 正在播报...';
                         } else if (currentEvent === 'status') {
                             recordStatus.textContent = data;
                         } else if (currentEvent === 'done') {
@@ -401,6 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = line.slice(5).trim();
                     if (currentEvent === 'chunk') {
                         contentDiv.textContent += data;
+                        recordStatus.textContent = 'DJ 正在播报...';
                     } else if (currentEvent === 'status') {
                         recordStatus.textContent = data;
                     } else if (currentEvent === 'done') {
