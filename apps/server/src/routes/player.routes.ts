@@ -140,7 +140,7 @@ playerRoutes.post("/report-play", (req: Request, res: Response) => {
     db.prepare(`
       INSERT INTO plays (user_id, song_id, song_title, artist, skipped)
       VALUES (?, ?, ?, ?, ?)
-    `).run(req.body.userId || 0, songId || "", title, artist || "", skipped ? 1 : 0);
+    `).run(req.body.userId || 1, songId || "", title, artist || "", skipped ? 1 : 0);
     res.success(null, "已记录");
   } catch (err: any) {
     res.fail(500, err.message);
