@@ -555,7 +555,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     scrollToBottom();
                     if (item.audioUrl) {
                         const desc = `🎵 《${item.title}》 - ${item.artist}`;
-                        addToPlayQueue(item.audioUrl, desc);
+                        // 找这首歌前面的串词 TTS
+                        let prevTtsUrl = '', prevTtsText = '';
+                        for (let j = i - 1; j >= 0; j--) {
+                            if (items[j].type === 'tts' && items[j].ttsAudioUrl) {
+                                prevTtsUrl = items[j].ttsAudioUrl;
+                                prevTtsText = items[j].text || '';
+                                break;
+                            }
+                        }
+                        addToPlayQueue('song', item.audioUrl, desc, prevTtsUrl, prevTtsText);
                         currentQueueIndex = playQueue.length - 1;
                         currentPlayingCard = d.querySelector('.song-card');
                         fetch('/api/player/report-play', {
@@ -640,24 +649,43 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     };
 
-    // 添加歌曲到播放队列
-    const addToPlayQueue = (url, desc) => {
-        if (!playQueue.find(item => item.url === url)) {
-            playQueue.push({ url, desc });
-        }
+    // 添加歌曲到播放队列（含串词 TTS）
+    const addToPlayQueue = (type, url, desc, ttsUrl, ttsText) => {
+        playQueue.push({ type, url, desc, ttsUrl, ttsText });
     };
 
-    // 播放指定队列索引
-    const playQueueItem = (index) => {
+    // 播放指定队列索引（自动处理串词→歌曲）
+    const playQueueItem = async (index) => {
         if (index < 0 || index >= playQueue.length) return;
         currentQueueIndex = index;
         const item = playQueue[index];
+        // 先播串词 TTS
+        if (item.ttsUrl) {
+            await new Promise((resolve) => {
+                audioPlayer.src = item.ttsUrl;
+                audioPlayer.play().then(() => {
+                    djInfoTitle.textContent = 'DJ 串词';
+                    djInfoDesc.textContent = item.ttsText || '';
+                    recordStatus.textContent = '播报中...';
+                }).catch(() => {});
+                audioPlayer.onended = resolve;
+                audioPlayer.onerror = resolve;
+            });
+        }
+        // 再播歌曲
         audioPlayer.src = item.url;
         audioPlayer.play().then(() => {
             djInfoTitle.textContent = '正在播放';
             djInfoDesc.textContent = item.desc;
             recordStatus.textContent = '播放中...';
         }).catch(() => {});
+        audioPlayer.onended = () => {
+            // 自动续播下一首
+            const state = { currentQueueIndex, playQueue };
+            if (state.currentQueueIndex < state.playQueue.length - 1) {
+                playQueueItem(state.currentQueueIndex + 1);
+            }
+        };
     };
 
     const playPrev = () => { if (currentQueueIndex > 0) playQueueItem(currentQueueIndex - 1); };
