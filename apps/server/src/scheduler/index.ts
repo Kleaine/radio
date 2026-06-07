@@ -1,13 +1,14 @@
 // scheduler/index.ts — 定时任务调度器
 // 早安电台 + 日程定时拉取
 
+import fs from "fs";
+import path from "path";
 import cron from "node-cron";
 import { createLlmService } from "../services/llm.service";
 import { createContextService } from "../services/context.service";
 import { createWeatherService } from "../services/weather.service";
 import { createCalendarService } from "../services/calendar.service";
 import { createMemoryWriter } from "../services/memory-writer";
-import { MockMusicService, QQMusicService } from "../services/music.service";
 
 // 早安电台任务
 async function morningRadioTask() {
@@ -106,6 +107,21 @@ export function startScheduledTasks(): void {
 
   // 启动时立即执行一次天气预热
   weatherWarmupTask();
+
+  // 每小时清理超过 24 小时的 TTS 文件
+  cron.schedule("0 * * * *", () => {
+    const dir = path.resolve(__dirname, "..", "..", "..", "tts", "outputs");
+    if (!fs.existsSync(dir)) return;
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    fs.readdirSync(dir).forEach(f => {
+      const fp = path.join(dir, f);
+      try {
+        if (now - fs.statSync(fp).mtimeMs > DAY) fs.unlinkSync(fp);
+      } catch {}
+    });
+  });
+  console.log("[scheduler] TTS 文件清理任务已注册 (每小时，超过24h删除)");
 
   console.log("[scheduler] 所有定时任务已启动");
 }
