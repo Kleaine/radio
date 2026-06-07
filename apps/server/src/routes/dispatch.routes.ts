@@ -70,10 +70,11 @@ const SEARCH_PATTERNS = [
   { regex: /^(.+)的歌$/, group: 1 },
 ];
 
-// 检查是否匹配搜索 — 只匹配极简指令如"播放晴天"
+// 检查是否匹配搜索 — 只匹配明确的歌名/歌手，分类词走 AI
 function matchSearch(message: string): string | null {
-  // 带任何标点、复杂表达的走 AI，不走搜索
   if (/[，。,！？、《》]/.test(message)) return null;
+  // 分类词/模糊词不走搜索：外语歌、安静的歌、摇滚、民谣 等
+  if (/外语|安静|摇滚|民谣|流行|古典|电子|嘻哈|爵士|R&B|说唱|古风|轻音乐|睡前|运动|开车|学习|治愈/.test(message)) return null;
 
   for (const { regex, group } of SEARCH_PATTERNS) {
     const match = message.match(regex);

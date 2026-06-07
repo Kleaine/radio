@@ -64,7 +64,7 @@ export async function enrichItems(
       // 多搜几首，排除 Live/现场版/有声书/播客/小说，优先取正式音乐
       const allSongs = await musicService.search(query, 8);
       // 完全排除：不是音乐的东西
-      const blockedPattern = /伴奏|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教/i;
+      const blockedPattern = /第.{1,6}[章节集]|伴奏|有声|小说|广播剧|评书|脱口秀|相声|喜马拉雅|播客|podcast|电台|故事|童话|儿歌|胎教|抖音|最火.{1,5}首|合集|排行|歌单|听过.{1,3}首|学唱/i;
       // Live/现场版：录音室版优先，没有也可以用
       const livePattern = /live|现场|演唱会|feat\.|remix/i;
       // 优先匹配歌手+歌名都对的正式版
