@@ -362,11 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
         textInput.disabled = true;
         recordStatus.textContent = 'AI 思考中...';
 
-        if (!silent) {
-            appendUserMessage(text);
-            _autoContinue = false;
-            _fetchingNext = false;
-        }
+        if (!silent) appendUserMessage(text);
         _lastUserMessage = silent ? _lastUserMessage : text;
 
         // 静默请求不创建聊天气泡
@@ -524,109 +520,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ================= 10. PlanResponse items[] 渲染与播放队列 =================
     let _lastUserMessage = '';
-    let _isPlaying = false;
-    let _autoContinue = true;
-    let _fetchingNext = false; // 防双重请求
-    let _pendingItems = []; // 预生成的待播项
 
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
 
         const isRecommend = /推荐/.test(_lastUserMessage);
 
-        // 正在播放 + 新计划来了 → 入队并立即播第一首
-        if (_isPlaying && !isRecommend) {
-            _fetchingNext = false;
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                if (item.type === 'song' && item.audioUrl) {
-                    let prevTtsUrl = '', prevTtsText = '';
-                    for (let j = i - 1; j >= 0; j--) {
-                        if (items[j].type === 'tts' && items[j].ttsAudioUrl) {
-                            prevTtsUrl = items[j].ttsAudioUrl;
-                            prevTtsText = items[j].text || '';
-                            break;
-                        }
-                    }
-                    addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`, prevTtsUrl, prevTtsText);
-                }
-            }
-            playQueueItem(currentQueueIndex + 1);
-            return;
-        }
-
-        _isPlaying = true;
-        _fetchingNext = false;
-
         if (isRecommend) {
-            // ── 推荐模式：一次性渲染所有卡片，用户自己选歌 ──
+            // 推荐模式：全部渲染，不自动播
             let pendingTtsText = '';
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                if (item.type === 'tts') {
-                    pendingTtsText = item.text || '';
-                } else if (item.type === 'song') {
+            for (const item of items) {
+                if (item.type === 'tts') { pendingTtsText = item.text || ''; }
+                else if (item.type === 'song') {
                     if (pendingTtsText) {
-                        const ttsDiv = document.createElement('div');
-                        ttsDiv.className = 'tts-card';
-                        ttsDiv.textContent = pendingTtsText;
-                        container.appendChild(ttsDiv);
-                        pendingTtsText = '';
+                        const d = document.createElement('div'); d.className = 'tts-card'; d.textContent = pendingTtsText; container.appendChild(d); pendingTtsText = '';
                     }
-                    const d = document.createElement('div');
-                    d.innerHTML = renderSongCard(item);
-                    container.appendChild(d);
+                    const d = document.createElement('div'); d.innerHTML = renderSongCard(item); container.appendChild(d);
                 }
             }
             scrollToBottom();
         } else {
-            // ── 电台模式：逐首渲染，逐首播放 ──
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
+            // 电台模式：逐首渲染+播放
+            for (const item of items) {
                 if (item.type === 'tts') {
-                    const ttsDiv = document.createElement('div');
-                    ttsDiv.className = 'tts-card';
-                    ttsDiv.textContent = item.text || '';
-                    container.appendChild(ttsDiv);
-                    scrollToBottom();
-                    if (item.ttsAudioUrl) {
-                        await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
-                    }
+                    const d = document.createElement('div'); d.className = 'tts-card'; d.textContent = item.text || ''; container.appendChild(d); scrollToBottom();
+                    if (item.ttsAudioUrl) await playAudio(item.ttsAudioUrl, item.text || '');
                 } else if (item.type === 'song') {
-                    const d = document.createElement('div');
-                    d.innerHTML = renderSongCard(item);
-                    container.appendChild(d);
-                    scrollToBottom();
+                    const d = document.createElement('div'); d.innerHTML = renderSongCard(item); container.appendChild(d); scrollToBottom();
                     if (item.audioUrl) {
-                        const desc = `🎵 《${item.title}》 - ${item.artist}`;
-                        let prevTtsUrl = '', prevTtsText = '';
-                        for (let j = i - 1; j >= 0; j--) {
-                            if (items[j].type === 'tts' && items[j].ttsAudioUrl) {
-                                prevTtsUrl = items[j].ttsAudioUrl;
-                                prevTtsText = items[j].text || '';
-                                break;
-                            }
-                        }
-                        addToPlayQueue('song', item.audioUrl, desc, prevTtsUrl, prevTtsText);
-                        currentQueueIndex = playQueue.length - 1;
                         resetAllCardButtons();
                         currentPlayingCard = d.querySelector('.song-card');
-                        if (currentPlayingCard) {
-                            const btn = currentPlayingCard.querySelector('.song-play-btn');
-                            if (btn) btn.textContent = '⏸';
-                        }
-                        fetch('/api/player/report-play', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
-                        }).catch(() => {});
-                        await playAudio(item.audioUrl, desc);
+                        if (currentPlayingCard) { const b = currentPlayingCard.querySelector('.song-play-btn'); if (b) b.textContent = '⏸'; }
+                        fetch('/api/player/report-play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId }) }).catch(() => {});
+                        await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
                     }
                 }
             }
         }
-
-        _isPlaying = false;
         resetUI();
     };
 
