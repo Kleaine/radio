@@ -626,13 +626,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 播完如果队列快空了，后台静默预取下一批（只入队不渲染）
         _isPlaying = false;
         resetUI();
-        if (playQueue.length - currentQueueIndex <= 2 && !_fetchingNext) {
-            _fetchingNext = true;
-            sendTextDispatch('继续', true);
-        }
     };
 
     const playAudio = (url, desc) => {
