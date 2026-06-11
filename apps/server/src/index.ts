@@ -25,8 +25,6 @@ import { audioRoutes } from "./routes/audio.routes";
 import { errorHandler } from "./middleware/error-handler";
 import { responseWrapper } from "./middleware/response-wrapper";
 import { startScheduledTasks } from "./scheduler";
-import { QQMusicService } from "./services/music.service";
-import fs from "fs";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -77,20 +75,6 @@ async function main() {
     // 初始化数据库
     initDatabase();
     console.log("[db] 数据库初始化完成");
-
-    // 后台同步 QQ 音乐口味（首次或超过 24h）
-    const tastePath = path.resolve(__dirname, "..", "..", "..", "..", "user", "qq_taste.json");
-    const shouldSync = !fs.existsSync(tastePath) ||
-      (Date.now() - fs.statSync(tastePath).mtimeMs > 24 * 60 * 60 * 1000);
-    if (shouldSync) {
-      console.log("[taste] 正在同步 QQ 音乐口味数据...");
-      const music = new QQMusicService(process.env.QQ_MUSIC_COOKIE || "");
-      music.pullAllTaste().then(data => {
-        fs.mkdirSync(path.dirname(tastePath), { recursive: true });
-        fs.writeFileSync(tastePath, data, "utf-8");
-        console.log("[taste] QQ 音乐口味数据同步完成");
-      }).catch(e => console.error("[taste] 同步失败:", e.message));
-    }
 
     // 启动定时任务
     startScheduledTasks();

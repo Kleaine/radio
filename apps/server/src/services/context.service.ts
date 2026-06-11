@@ -1,8 +1,6 @@
 // context.service.ts — 上下文组装
 // 把时间、天气、日程、播放历史、用户画像拼成文本，注入 LLM prompt
 
-import fs from "fs";
-import path from "path";
 import type { WeatherService, WeatherData } from "./weather.service";
 import type { CalendarService, CalendarEvent } from "./calendar.service";
 import type { MemoryWriter } from "./memory-writer";
@@ -89,20 +87,6 @@ export function createContextService(config: ContextConfig): ContextService {
       // 日程（比天气更有用）
       const calendar = await getCalendarText();
       if (calendar) parts.push(`今日日程：${calendar}`);
-
-      // QQ 音乐歌单口味（一次性拉取，存本地 JSON）
-      const tastePath = path.resolve(__dirname, "..", "..", "..", "..", "user", "qq_taste.json");
-      try {
-        if (fs.existsSync(tastePath)) {
-          const tasteData = JSON.parse(fs.readFileSync(tastePath, "utf-8"));
-          const artistSet = new Set<string>();
-          if (tasteData.favSongs) tasteData.favSongs.forEach((s: any) => { if (s.artist) artistSet.add(s.artist); });
-          if (tasteData.playlists) tasteData.playlists.forEach((pl: any) => {
-            if (pl.songs) pl.songs.forEach((s: any) => { if (s.artist) artistSet.add(s.artist); });
-          });
-          if (artistSet.size > 0) parts.push(`用户QQ音乐常听歌手：${[...artistSet].slice(0, 15).join("、")}`);
-        }
-      } catch {}
 
       // 口味画像：profile.json（长期累积）+ 数据库 Top 歌手（兜底）
       const profile = getProfileSummary();

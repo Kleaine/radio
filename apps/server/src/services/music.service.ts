@@ -102,21 +102,6 @@ export class MockMusicService implements MusicService {
     return { lrc: "[00:00.00]暂无歌词" };
   }
 
-  async pullAllTaste(): Promise<string> {
-    const result: any = { playlists: [], favSongs: [] };
-    try {
-      const playlists = await this.getMyPlaylists();
-      for (const pl of playlists.slice(0, 5)) {
-        const songs = await this.getPlaylistSongs(pl.id, 50);
-        result.playlists.push({ name: pl.name, songs });
-      }
-    } catch (e: any) { console.error("[taste] 歌单拉取失败:", e.message); }
-    try {
-      const favs = await callBridge("fav", "", 30);
-      if (Array.isArray(favs)) result.favSongs = favs;
-    } catch (e: any) { console.error("[taste] 收藏拉取失败:", e.message); }
-    return JSON.stringify(result, null, 2);
-  }
 
   async getMyPlaylists(): Promise<Array<{ id: number; name: string; count: number }>> { return []; }
   async getPlaylistSongs(_plId: number, _limit = 50): Promise<Array<{ mid: string; title: string; artist: string }>> { return []; }
@@ -163,29 +148,5 @@ export class QQMusicService implements MusicService {
     return { lrc: "[00:00.00]暂无歌词" };
   }
 
-  async pullAllTaste(): Promise<string> {
-    const result: any = { playlists: [], favSongs: [] };
-    try {
-      const playlists = await this.getMyPlaylists();
-      for (const pl of playlists.slice(0, 5)) {
-        const songs = await this.getPlaylistSongs(pl.id, 50);
-        result.playlists.push({ name: pl.name, songs });
-      }
-    } catch (e: any) { console.error("[taste] 歌单拉取失败:", e.message); }
-    try {
-      const favs = await callBridge("fav", "", 30);
-      if (Array.isArray(favs)) result.favSongs = favs;
-    } catch (e: any) { console.error("[taste] 收藏拉取失败:", e.message); }
-    return JSON.stringify(result, null, 2);
-  }
 
-  async getMyPlaylists(): Promise<Array<{ id: number; name: string; count: number }>> {
-    const data = await callBridge("playlists", "");
-    return (data && Array.isArray(data)) ? data : [];
-  }
-
-  async getPlaylistSongs(plId: number, limit = 50): Promise<Array<{ mid: string; title: string; artist: string }>> {
-    const data = await callBridge("pl_songs", String(plId), limit);
-    return (data && Array.isArray(data)) ? data : [];
-  }
 }
