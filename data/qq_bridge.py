@@ -222,51 +222,6 @@ async def get_fav_songs(limit: int = 20):
         return []
 
 
-async def get_my_playlists():
-    """获取用户自建歌单列表"""
-    cred = load_cred()
-    if not cred or not hasattr(cred, "musicid") or not cred.musicid:
-        return []
-    try:
-        api = Client(credential=cred)
-        result = await api.user.get_created_songlist(cred.musicid)
-        lists = result.list if hasattr(result, 'list') else []
-        return [{"id": l.tid, "name": l.name, "count": getattr(l, "song_count", 0)} for l in lists]
-    except Exception as e:
-        print(f"[bridge] 获取歌单失败: {e}", file=sys.stderr)
-        return []
-
-async def get_playlist_songs(pl_id: int, limit: int = 50):
-    """获取歌单中的歌曲"""
-    cred = load_cred()
-    if not cred:
-        return []
-    try:
-        api = Client(credential=cred)
-        result = await api.songlist.get_detail(pl_id, num=limit)
-        songs = result.song_list[:limit] if hasattr(result, 'song_list') else []
-        if not songs:
-            return []
-        mids = [s.mid for s in songs if hasattr(s, "mid")]
-        if not mids:
-            return []
-        detail = await api.song.query_song(mids)
-        tracks = detail.tracks if hasattr(detail, 'tracks') else []
-        track_map = {t.mid: t for t in tracks if hasattr(t, "mid")}
-        out = []
-        for s in songs:
-            if not hasattr(s, "mid"): continue
-            track = track_map.get(s.mid)
-            out.append({
-                "mid": s.mid,
-                "title": getattr(track, "title", "") or getattr(s, "name", ""),
-                "artist": ", ".join(a.name for a in track.singer) if track and hasattr(track, "singer") else "",
-            })
-        return out
-    except Exception as e:
-        print(f"[bridge] 获取歌单歌曲失败: {e}", file=sys.stderr)
-        return []
-
 # CLI 入口
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -288,14 +243,6 @@ if __name__ == "__main__":
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 20
         print(json.dumps(asyncio.run(get_fav_songs(limit)), ensure_ascii=False))
 
-    elif cmd == "playlists":
-        print(json.dumps(asyncio.run(get_my_playlists()), ensure_ascii=False))
-
-    elif cmd == "pl_songs" and len(sys.argv) >= 3:
-        pl_id = int(sys.argv[2])
-        limit = int(sys.argv[3]) if len(sys.argv) > 3 else 50
-        print(json.dumps(asyncio.run(get_playlist_songs(pl_id, limit)), ensure_ascii=False))
-
     else:
-        print("用法: python qq_bridge.py <search|url|fav|playlists|pl_songs> [参数...]")
+        print("用法: python qq_bridge.py <search|url|fav> [参数...]")
         sys.exit(1)

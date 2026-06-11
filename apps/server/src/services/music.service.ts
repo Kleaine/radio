@@ -8,7 +8,6 @@ import type { MusicService, Song, SongUrlResult, LyricResult } from "../interfac
 const BRIDGE = path.resolve(__dirname, "..", "..", "..", "..", "data", "qq_bridge.py");
 const PYTHON_PATHS = [
   process.env.PYTHON_PATH,
-  "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
   "python",
   "python3",
 ].filter(Boolean) as string[];
@@ -101,11 +100,6 @@ export class MockMusicService implements MusicService {
   async getLyric(_songId: string): Promise<LyricResult> {
     return { lrc: "[00:00.00]暂无歌词" };
   }
-
-
-  async getMyPlaylists(): Promise<Array<{ id: number; name: string; count: number }>> { return []; }
-  async getPlaylistSongs(_plId: number, _limit = 50): Promise<Array<{ mid: string; title: string; artist: string }>> { return []; }
-  async pullAllTaste(): Promise<string> { return JSON.stringify({ playlists: [], favSongs: [] }); }
 }
 
 // ── 真实实现：Python 桥接到 qqmusic_api（扫码登录后可用）──
@@ -147,6 +141,4 @@ export class QQMusicService implements MusicService {
   async getLyric(_songId: string): Promise<LyricResult> {
     return { lrc: "[00:00.00]暂无歌词" };
   }
-
-
 }

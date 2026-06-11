@@ -578,6 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 静默请求不创建聊天气泡
         const sDiv = document.createElement('div');
         sDiv.className = 'message system-message';
+        if (silent) sDiv.dataset.silent = 'true';
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
         contentDiv.textContent = '';
@@ -719,7 +720,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (type === 'plan') {
             const items = payload.items || [];
-            // 静默请求：复用 sDiv 样式但不创建空气泡
+            const isSilent = sDiv.dataset.silent === 'true';
+            if (isSilent) {
+                playPlanItems(items, null);
+                return;
+            }
             if (!sDiv.parentNode) {
                 sDiv.style.padding = '0';
                 sDiv.style.background = 'none';
@@ -737,9 +742,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const playPlanItems = async (items, container) => {
         if (!items.length) return;
 
+        const isSilent = container === null;
         const isRecommend = /推荐/.test(_lastUserMessage);
 
-        if (isRecommend) {
+        if (isSilent) {
+            // 静默模式：只播不渲染，把歌曲加入队列
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.type === 'tts' && item.ttsAudioUrl) {
+                    await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+                } else if (item.type === 'song' && item.audioUrl) {
+                    addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`,
+                        (i > 0 && items[i-1].type === 'tts' && items[i-1].ttsAudioUrl) ? items[i-1].ttsAudioUrl : '',
+                        (i > 0 && items[i-1].type === 'tts') ? (items[i-1].text || '') : '');
+                    currentQueueIndex = playQueue.length - 1;
+                    fetch('/api/player/report-play', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
+                    }).catch(() => {});
+                    await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
+                }
+            }
+        } else if (isRecommend) {
             // ── 推荐模式：一次性渲染全部卡片 ──
             let pendingTtsText = '';
             for (let i = 0; i < items.length; i++) {
