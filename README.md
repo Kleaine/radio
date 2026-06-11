@@ -11,6 +11,7 @@
 - **AI DJ 小雨** — 有品味的电台主持人，不说套话，说质感。串词温暖自然，偶尔聊聊歌曲的幕后故事
 - **智能选歌** — 综合口味、天气、时段、日程、播放历史七个维度，不是随机播放
 - **真实音乐** — 对接 QQ 音乐，搜索真实歌曲并播放
+- **语音识别** — Whisper Tiny 做转写 + 标点恢复，说句话就能控制电台
 - **TTS 语音** — DJ 串词通过 GPT-SoVITS 合成语音播报
 - **三层意图识别** — 播放指令 / 歌曲搜索 / 自然语言聊天，自动分流
 
@@ -25,21 +26,30 @@ npm install
 cp .env.example .env
 # 编辑 .env，必须填入 DOUBAO_API_KEY
 
-# 2. 启动后端
+# 2. 启动 ASR 语音识别服务（分工3，Python + Whisper Tiny）
+cd ../asr
+python -m pip install -r requirements.txt
+python asr_service.py
+# → http://localhost:5000
+#   诊断页面: http://localhost:5000/static/diagnostic_plus.html
+
+# 3. 启动后端
+cd ../server
 npx tsx src/index.ts
 # → http://localhost:3000
 
-# 3. (可选) QQ音乐扫码登录（才能播放真实歌曲）
+# 4. (可选) QQ音乐扫码登录（才能播放真实歌曲）
 cd ../..
 python data/qq_login.py
 # 用 QQ 扫描生成的二维码图片
 
-# 4. (可选) 启动 TTS 语音服务
+# 5. (可选) 启动 TTS 语音服务
 cd apps/tts
 .\scripts\run_tts_service.ps1
 ```
 
 浏览器打开 `http://localhost:3000`，注册账号登录后即可使用。
+点击录音按钮说话，AI 会自动识别并回复。
 
 ---
 
@@ -48,11 +58,35 @@ cd apps/tts
 | 层 | 选型 |
 |---|---|
 | LLM | 豆包（火山引擎），OpenAI SDK，流式 SSE |
+| ASR | Whisper Tiny 转写 + `p208p2002/zh-wiki-punctuation-restore`（BERT-base 中文标点恢复，420MB） |
 | 音乐 | QQ 音乐 Python 桥接 ([QQMusicApi](https://github.com/L-1124/QQMusicApi)) |
 | 天气 | OpenWeatherMap / Wttr.in / Mock 三层回退 |
 | 后端 | Express + TypeScript + SQLite |
-| 前端 | Vanilla JS + PWA + SSE 流式 |
+| 前端 | Vanilla JS + PWA + SSE 流式 + 16kHz WAV 录音 |
 | TTS | GPT-SoVITS (Python FastAPI) |
+
+---
+
+## ASR 语音识别
+
+小雨的语音识别是**两步流水线**：
+
+```
+麦克风 16kHz WAV
+     ↓
+Whisper Tiny (语音 → 无标点文本)
+     ↓
+p208p2002/zh-wiki-punctuation-restore (BERT Token Classification → 插入中文标点)
+     ↓
+带标点的简体中文文本 → 交给 AI DJ
+```
+
+**标点恢复模型：** `p208p2002/zh-wiki-punctuation-restore`
+- 基于 BERT-base，训练自中文维基百科语料，约 420MB
+- 输出标签：`S-。`、`S-，`、`S-？`、`S-！`、`S-；`、`S-：` 等
+- **我们的改进**：用 `offset_mapping` 后处理从原始文本回写英文/数字，解决 BERT `[UNK]` 导致英文丢失的问题
+
+> 🔧 独立诊断页面：启动 ASR 服务后访问 `http://localhost:5000/static/diagnostic_plus.html` 可在主前端之外验证识别效果。
 
 ---
 
@@ -63,10 +97,15 @@ radio/
 ├── apps/
 │   ├── web/                          ← 前端 PWA 播放器（分工1）
 │   │   ├── index.html                ← 主页面
-│   │   ├── app.js                    ← 核心逻辑（SSE + 播放队列 + 录音）
+│   │   ├── app.js                    ← 核心逻辑（SSE + 播放队列 + 16kHz WAV 录音）
 │   │   ├── style-v3.css              ← 暗色电台主题
 │   │   ├── manifest.json             ← PWA 配置
 │   │   └── sw.js                     ← Service Worker
+│   │
+│   ├── asr/                          ← ASR 语音识别（分工3）
+│   │   ├── asr_service.py            ← Whisper + 标点恢复 Flask 服务
+│   │   ├── requirements.txt          ← Python 依赖
+│   │   └── diagnostic_plus.html      ← 诊断/测试页面（独立于主前端）
 │   │
 │   ├── tts/                          ← TTS 语音合成（分工4）
 │   │   ├── tts_service/              ← GPT-SoVITS FastAPI 服务
@@ -89,7 +128,7 @@ radio/
 │       │   ├── routes/               ← HTTP 路由
 │       │   │   ├── dispatch.routes.ts← 三层意图分发 + SSE + 断连保护
 │       │   │   ├── audio.routes.ts   ← 音频代理（透传+302兜底+缓存上限）
-│       │   │   ├── chat.routes.ts    ← 语音聊天
+│       │   │   ├── chat.routes.ts    ← 语音聊天 + ASR 转发（POST /api/asr）
 │       │   │   ├── player.routes.ts  ← 播放控制 + 播歌上报
 │       │   │   ├── auth.routes.ts    ← 登录注册
 │       │   │   └── schedule.routes.ts← 飞书日程
@@ -133,6 +172,7 @@ radio/
 |---|---|---|
 | `DOUBAO_API_KEY` | 豆包 API Key | 是 |
 | `DOUBAO_MODEL` | 模型名 | 否 |
+| `ASR_SERVICE_URL` | ASR 服务地址（默认 http://localhost:5000） | 否 |
 | `TTS_SERVICE_URL` | TTS 地址 | 否 |
 | `OPENWEATHER_API_KEY` | 天气 API Key | 否 |
 | `CITY` | 城市 | 否 |
@@ -146,7 +186,9 @@ radio/
 |---|---|
 | [API 接口文档](apps/server/docs/API接口文档-分工2.md) | 分工2 |
 | [后端启动指南](apps/server/docs/SERVER_START-分工2.md) | 分工2 |
+| [ASR 语音识别说明](apps/server/src/docs/ASR说明-分工3.md) | 分工3 |
 | [项目架构说明](apps/server/src/docs/项目架构说明-分工5.md) | 分工5 |
+| [代码审计报告](apps/server/src/docs/代码审计报告-2026-06-05.md) | 分工5 |
 | [意图规则表](apps/server/src/docs/意图规则表-分工5.md) | 分工5 |
 | [DJ 人设卡](apps/server/src/prompts/plan-system.md) | 分工5 |
 | [TTS 启动指南](apps/tts/docs/TTS_START.md) | 分工4 |
@@ -159,13 +201,31 @@ radio/
 |---|---|---|
 | 分工1 | 前端 PWA 播放器 | ✅ |
 | 分工2 | 后端 API + 数据库 | ✅ |
-| 分工3 | ASR 语音识别 | 🚧 |
+| 分工3 | ASR 语音识别（Whisper Tiny + 标点恢复，端口 5000） | ✅ |
 | 分工4 | TTS 语音合成 | ✅ |
 | 分工5 | AI 大脑 + DJ 文案 + 音乐/天气 API | ✅ |
 
 ---
 
 ## 更新日志
+
+### 2026-06-11 — @Kleaine（ASR 集成与修复）
+
+**ASR 服务接入**
+- `apps/asr/asr_service.py` — Whisper Tiny + 标点恢复 Flask 服务（端口 5000），返回 `{status, text, results.{whisper,google}}` 结构
+- `apps/asr/diagnostic_plus.html` — 独立诊断页面，用于在主前端之外验证 ASR 识别效果
+
+**前端录音逻辑重构（`apps/web/app.js`）**
+- `_recStart` — 增加 `isStarting` 中间状态，防止 `getUserMedia` 异步期间用户重复点击导致并发录音
+- `_recStop` — 先清资源（停止麦克风 + 更新 UI），再用 `setTimeout` 异步做重采样/WAV 编码，避免长音频时按钮无响应
+- `_resampleLinear` — 新增线性重采样，浏览器 `AudioContext.sampleRate` 不为 16kHz 时自动转换到 16kHz
+- `_recSendASR` — 结果字段优先级从 `data.text`/`whisper.text` 改为 `data.results.google.text`（Google 识别 + 独立标点恢复，与 `diagnostic_plus.html` 一致），修复标点错乱/繁体中文问题
+
+**后端 ASR 转发（`apps/server/src/routes/chat.routes.ts`）**
+- `performASR` — 用 Node 18+ 内置 `fetch` + `FormData` 替代 `http.request` + `form-data` npm 包
+- 结果字段优先级同步前端：优先 `results.google.text` → 顶层 `text` → `results.whisper.text`
+
+---
 
 ### 2026-06-07 — @akakwkwk（后端）
 
@@ -176,9 +236,18 @@ radio/
 
 ### 2026-06-07 — @Kleaine（晚间）
 
-**播放器修复**
-- `app.js` — 砍掉预生成防卡片堆积，按钮全局重置，播完自动续播，点下一首串词先播填空白
-- `plan-system.md` — "最后"改为智能收尾：默认连续播，用户说数量才收尾
+**代码审计**
+- `app.js` — 清理未使用变量 `_autoContinue`/`_fetchingNext`，SSE 解析去重
+- `dispatch.routes.ts` — 清理未使用 import（MockMusicService/PlanResponse/authMiddleware）
+- `chat.routes.ts` — 同上
+- `music.service.ts` / `audio.routes.ts` — `findPython`/`callBridge` 重复代码标记待提取
+- `qq_bridge.py` — `get_fav_songs`/`fav` CLI 未被调用标记待清理
+- `player.routes.ts` — 8/9 端点死亡代码标记
+
+**功能修复**
+- `dispatch.routes.ts` — 最近播放硬过滤（用户指名要的歌不拦）
+- `app.js` — 播放器重构：删复杂状态变量，统一渲染路径
+- `app.js` — 静默请求不创建空气泡
 
 ### 2026-06-07 — @Kleaine（下午）
 
