@@ -307,22 +307,26 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
       },
     });
 
-    // 硬过滤：去掉最近播放过的歌（LLM 可能不遵守 prompt 指令）
+    // 硬过滤：标准化歌名后跟历史比对 + 批次内去重
+    const normTitle = (t: string) => {
+      return t.replace(/[（(][^)）]*[)）]/g, '')  // 去括号内容 "晴天(Live)"→"晴天"
+             .replace(/[，,。、！？《》【】\s'"\-\.]/g, '')  // 去标点空格
+             .toLowerCase();
+    };
     if (userId) {
       const db = getDb();
-      const recentTitles = db.prepare(`
-        SELECT DISTINCT LOWER(song_title) FROM plays
+      const recentNorms = db.prepare(`
+        SELECT DISTINCT song_title FROM plays
         WHERE user_id = ? ORDER BY played_at DESC LIMIT 30
-      `).all(userId).map((r: any) => r['LOWER(song_title)']);
+      `).all(userId).map((r: any) => normTitle(r.song_title));
+      const seenInBatch = new Set<string>();
       enrichedItems = enrichedItems.filter(item => {
         if (item.type !== 'song') return true;
-        const title = (item.title || '').toLowerCase();
-        // 用户指名要的歌不拦
-        if (message.toLowerCase().includes(title)) return true;
-        if (recentTitles.includes(title)) {
-          console.log(`[dispatch] 硬过滤: ${item.title} (最近听过)`);
-          return false;
-        }
+        const norm = normTitle(item.title || '');
+        if (message.toLowerCase().includes(norm)) return true; // 用户指名不拦
+        if (seenInBatch.has(norm)) { console.log(`[dispatch] 批次内去重: ${item.title}`); return false; }
+        if (recentNorms.includes(norm)) { console.log(`[dispatch] 硬过滤: ${item.title}`); return false; }
+        seenInBatch.add(norm);
         return true;
       });
     }
