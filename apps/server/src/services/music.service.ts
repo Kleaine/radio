@@ -101,6 +101,16 @@ export class MockMusicService implements MusicService {
   async getLyric(_songId: string): Promise<LyricResult> {
     return { lrc: "[00:00.00]暂无歌词" };
   }
+
+  async getMyPlaylists(): Promise<Array<{ id: number; name: string; count: number }>> {
+    const data = await callBridge("playlists", "");
+    return (data && Array.isArray(data)) ? data : [];
+  }
+
+  async getPlaylistSongs(plId: number, limit = 50): Promise<Array<{ mid: string; title: string; artist: string }>> {
+    const data = await callBridge("pl_songs", String(plId), limit);
+    return (data && Array.isArray(data)) ? data : [];
+  }
 }
 
 // ── 真实实现：Python 桥接到 qqmusic_api（扫码登录后可用）──
@@ -141,5 +151,15 @@ export class QQMusicService implements MusicService {
 
   async getLyric(_songId: string): Promise<LyricResult> {
     return { lrc: "[00:00.00]暂无歌词" };
+  }
+
+  async getMyPlaylists(): Promise<Array<{ id: number; name: string; count: number }>> {
+    const data = await callBridge("playlists", "");
+    return (data && Array.isArray(data)) ? data : [];
+  }
+
+  async getPlaylistSongs(plId: number, limit = 50): Promise<Array<{ mid: string; title: string; artist: string }>> {
+    const data = await callBridge("pl_songs", String(plId), limit);
+    return (data && Array.isArray(data)) ? data : [];
   }
 }
