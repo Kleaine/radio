@@ -90,12 +90,65 @@ function initServices(userId: number) {
   return { contextService, llmService, musicService, memoryWriter };
 }
 
-// ASR 模拟（真实场景需对接 ASR 服务）
+// ASR 语音识别 — 调用分工3 封装的 Whisper+标点服务
 async function performASR(audioBuffer: Buffer, mimeType: string): Promise<string> {
-  // TODO: 对接分工3 ASR 服务
-  // 当前返回 Mock 结果
-  console.log(`[asr] 收到音频: ${mimeType}, 大小: ${audioBuffer.length} bytes`);
-  return "帮我看看接下来的日程并放首歌。";
+  const ASR_URL = process.env.ASR_SERVICE_URL || "http://localhost:5000";
+  console.log(`[asr] 收到音频: ${mimeType}, 大小: ${audioBuffer.length} bytes, 调用 ${ASR_URL}/recognize/file`);
+
+  if (audioBuffer.length < 1024) {
+    console.warn(`[asr] 音频文件过小 (${audioBuffer.length} bytes)，可能录音失败`);
+    return "（未能识别出语音内容，请试着重新说一次）";
+  }
+
+  try {
+    // —— 用 Node.js 内置 fetch + FormData 上传 multipart/form-data ——
+    //    替代之前的 form-data + http.request，更简洁可靠
+    const formData = new FormData();
+    const ext = mimeType.includes("wav") ? "wav" : "webm";
+    formData.append(
+      "file",
+      new Blob([audioBuffer], { type: mimeType || "audio/wav" }),
+      `voice_${Date.now()}.${ext}`
+    );
+
+    const response = await fetch(`${ASR_URL}/recognize/file`, {
+      method: "POST",
+      body: formData as any, // Node.js fetch 的 FormData 和浏览器兼容
+    });
+
+    if (!response.ok) {
+      throw new Error(`ASR HTTP ${response.status}: ${await response.text().then(t => t.slice(0, 200))}`);
+    }
+
+    const asrResult = await response.json();
+    console.log(`[asr] ASR 服务响应: status=${asrResult.status}, text="${asrResult.text || ''}", audio_duration=${asrResult.audio_duration || 'N/A'}`);
+    console.log(`[asr] results.google:`, JSON.stringify(asrResult.results?.google).slice(0, 200));
+
+    // —— 关键修复：优先用 results.google.text（Google 识别 + 独立标点后处理）
+    //    而不是顶层 text 或 results.whisper.text（Whisper 自带标点会出问题）
+    if (asrResult?.results?.google?.status === 'success' && asrResult.results.google.text?.trim()) {
+        console.log(`[asr] 使用 Google 识别结果: "${asrResult.results.google.text.trim()}"`);
+        return asrResult.results.google.text.trim();
+    }
+
+    // fallback：顶层 text 字段
+    if (asrResult?.status === 'ok' && asrResult.text?.trim()) {
+        console.log(`[asr] fallback: 顶层 text: "${asrResult.text.trim()}"`);
+        return asrResult.text.trim();
+    }
+
+    // fallback：whisper 结果
+    if (asrResult?.results?.whisper?.text?.trim()) {
+        console.log(`[asr] fallback whisper: "${asrResult.results.whisper.text.trim()}"`);
+        return asrResult.results.whisper.text.trim();
+    }
+
+    console.warn(`[asr] 未能识别出文字:`, JSON.stringify(asrResult).slice(0, 300));
+    return "（未能识别出语音内容，请试着重新说一次）";
+  } catch (err: any) {
+    console.error(`[asr] 调用失败:`, err?.message || err);
+    return "（语音识别服务未就绪，请稍后再试，或直接在下方输入框打字）";
+  }
 }
 
 // TTS 调用
@@ -131,6 +184,22 @@ async function callTTS(text: string, voiceStyle: string): Promise<string> {
     return "";
   }
 }
+
+// ── POST /api/asr ── 仅做语音识别，返回识别文本，让用户确认后再发送
+chatRoutes.post("/asr", authMiddleware, upload.single("audio"), async (req: AuthRequest, res: Response) => {
+  if (!req.file) {
+    res.fail(400, "缺少音频文件");
+    return;
+  }
+
+  try {
+    const userText = await performASR(req.file.buffer, req.file.mimetype);
+    res.success({ text: userText });
+  } catch (err: any) {
+    console.error("[asr] 识别失败:", err.message);
+    res.fail(500, "语音识别失败，请稍后重试");
+  }
+});
 
 // ── POST /api/chat ──
 chatRoutes.post("/chat", authMiddleware, upload.single("audio"), async (req: AuthRequest, res: Response) => {

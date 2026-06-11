@@ -336,6 +336,7 @@ body::after {
     border-radius: 50%;
     transition: opacity 0.3s ease;
     z-index: 0;
+    pointer-events: none;
 }
 
 .record-btn {
@@ -353,7 +354,8 @@ body::after {
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     outline: none;
     -webkit-tap-highlight-color: transparent;
-    z-index: 1;
+    position: relative;
+    z-index: 10;
 }
 
 .record-btn svg {
@@ -373,9 +375,10 @@ body::after {
 
 .record-btn.recording {
     animation: micPulse 1.5s infinite;
+    cursor: pointer;
 }
 
-.record-btn.recording ~ .record-btn-wrapper::before {
+.record-btn-wrapper:has(.record-btn.recording)::before {
     opacity: 0.5;
     animation: glowPulse 1.5s infinite;
 }

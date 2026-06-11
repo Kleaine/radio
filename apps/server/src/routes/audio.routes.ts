@@ -1,5 +1,5 @@
 // routes/audio.routes.ts — 音频代理（懒加载 + 预缓存 + 透传）
-// 模仿 Claudio：服务器取 QQ 音乐 URL → 拉音频 → 透传给浏览器
+// 增加重试逻辑，解决 qimei 设备指纹请求偶尔 ConnectionResetError 的问题
 
 import { Router, Request, Response } from "express";
 import { execFile } from "child_process";
@@ -11,9 +11,12 @@ const BRIDGE = path.resolve(__dirname, "..", "..", "..", "..", "data", "qq_bridg
 const PYTHON_PATHS = [
   process.env.PYTHON_PATH,
   "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
-  "python3",
   "python",
+  "python3",
 ].filter(Boolean) as string[];
+
+const MAX_BRIDGE_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 let _pythonPath: string | null = null;
 async function findPython(): Promise<string> {
@@ -30,19 +33,42 @@ async function findPython(): Promise<string> {
   return "python";
 }
 
-function callBridge(subcmd: string, arg: string): Promise<any> {
-  return new Promise((resolve) => {
-    findPython().then(python => {
-      execFile(python, [BRIDGE, subcmd, arg], {
-        maxBuffer: 2 * 1024 * 1024,
-        timeout: 30000,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-      }, (err, stdout) => {
-        if (err) { resolve(null); return; }
-        try { resolve(JSON.parse(stdout)); } catch { resolve(null); }
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function callBridge(subcmd: string, arg: string): Promise<any> {
+  const python = await findPython();
+  for (let attempt = 1; attempt <= MAX_BRIDGE_RETRIES; attempt++) {
+    try {
+      const result = await new Promise<any>((resolve, reject) => {
+        execFile(python, [BRIDGE, subcmd, arg], {
+          maxBuffer: 2 * 1024 * 1024,
+          timeout: 30000,
+          env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        }, (err, stdout) => {
+          if (err) { reject(err); return; }
+          try { resolve(JSON.parse(stdout)); }
+          catch (e) { reject(new Error(`JSON parse failed: ${String(e).slice(0, 200)}`)); }
+        });
       });
-    });
-  });
+      return result;
+    } catch (err: any) {
+      const msg = String(err?.message || err || "").toLowerCase();
+      const isRetryable = msg.includes("connection") || msg.includes("reset") ||
+        msg.includes("timeout") || msg.includes("timed out") || msg.includes("econn") ||
+        msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") ||
+        msg.includes("json parse") || msg.includes("exit code");
+      if (isRetryable && attempt < MAX_BRIDGE_RETRIES) {
+        console.warn(`[audio-bridge] 第 ${attempt} 次失败: ${msg.slice(0, 120)}，${RETRY_DELAY_MS}ms 后重试`);
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      console.error(`[audio-bridge] 调用失败 (${subcmd}): ${msg.slice(0, 200)}`);
+      return null;
+    }
+  }
+  return null;
 }
 
 // ── URL 预缓存（最多 200 条，超了清最旧的）──
@@ -61,7 +87,6 @@ export async function preWarmUrls(mids: string[]): Promise<void> {
   const uncached = mids.filter(m => !urlCache.has(m));
   if (uncached.length === 0) return;
 
-  // 逐个查询，避免桥接只支持单个 mid 的问题
   const results = await Promise.allSettled(
     uncached.map(async (mid) => {
       try {
@@ -85,7 +110,6 @@ audioRoutes.get("/audio", async (req: Request, res: Response) => {
   }
 
   try {
-    // 1. 取 QQ 音乐播放链接
     let qqUrl = urlCache.get(mid);
     if (!qqUrl) {
       const urls = await callBridge("url", mid);
@@ -97,7 +121,6 @@ audioRoutes.get("/audio", async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. 透传模式，失败则 302 兜底
     try {
       const audioRes = await fetch(qqUrl, { signal: AbortSignal.timeout(15000) });
       if (!audioRes.ok) throw new Error("fetch failed");

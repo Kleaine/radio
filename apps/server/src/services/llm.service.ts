@@ -64,28 +64,170 @@ export interface LlmService {
   ): Promise<PlanResponse>;
 }
 
-// ── JSON 提取（三层回退）──
+// ── JSON 修复：LLM 偶尔会输出有微小语法错误的 JSON ──
+// 修复：混合引号、单引号代替冒号、尾逗号等常见问题
 
-function extractJson(text: string): Record<string, any> | null {
-  // 第 1 层：直接解析
-  try {
-    return JSON.parse(text);
-  } catch {}
+function fixJson(raw: string): string {
+  let s = raw.trim();
 
-  // 第 2 层：提取 ```json ... ``` 代码块
-  const codeMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeMatch?.[1]) {
-    try {
-      return JSON.parse(codeMatch[1].trim());
-    } catch {}
+  // 1. 去掉可能的外层包裹（```json 或 ```）
+  s = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+
+  // 2. 找到最外层 { ... } 区间
+  const firstBrace = s.indexOf("{");
+  const lastBrace = s.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    s = s.slice(firstBrace, lastBrace + 1);
   }
 
-  // 第 3 层：正则提取第一个 { ... } 区间
+  // 3. 逐字符扫描 + 状态机：把所有字符串字面量统一用双引号
+  //    - key 必须是 "key": （修复 'key': 和 'key' : 和 "key' :）
+  //    - 字符串值必须是 "value"（修复 'value'）
+  //    - 修复 "key' : 'value' → "key": "value"
+  //    - 移除尾逗号
+  let result = "";
+  let i = 0;
+  let inString: string | null = null;  // 当前字符串的引号类型
+  let stringStart = -1;
+  let stringContent: string[] = [];
+
+  const tokens: string[] = [];  // 输出流：交替的"非字符串 token"和"字符串 token"
+
+  // 阶段 1：把输入切成 "非字符串片段" 和 "字符串字面量片段" 的交替序列
+  let currentNonString = "";
+  while (i < s.length) {
+    const ch = s[i];
+
+    if (inString) {
+      // 在字符串内部
+      if (ch === "\\") {
+        // 转义字符：原样保留
+        stringContent.push(ch);
+        if (i + 1 < s.length) {
+          stringContent.push(s[i + 1]);
+          i += 2;
+          continue;
+        }
+        i++;
+        continue;
+      }
+      if (ch === inString) {
+        // 字符串结束
+        tokens.push("STR:" + stringContent.join(""));
+        inString = null;
+        stringContent = [];
+        i++;
+        continue;
+      }
+      // 字符串内部的普通字符（注意：在 '...' 里的双引号或 "..." 里的单引号都当作普通字符）
+      stringContent.push(ch);
+      i++;
+      continue;
+    }
+
+    // 不在字符串内
+    if (ch === '"' || ch === "'") {
+      // 字符串开始
+      if (currentNonString) {
+        tokens.push("TOK:" + currentNonString);
+        currentNonString = "";
+      }
+      inString = ch;
+      stringContent = [];
+      i++;
+      continue;
+    }
+
+    currentNonString += ch;
+    i++;
+  }
+  if (currentNonString) tokens.push("TOK:" + currentNonString);
+
+  // 阶段 2：重构 JSON
+  // 遍历 token，对 STR 统一用双引号（并转义内部未转义的双引号）
+  // 对 TOK 部分：
+  //   - 修 'key': → "key":
+  //   - 修 "key' → "key"
+  //   - 修 ",\s*}" → "}"  (尾逗号)
+  //   - 修 ",\s*]" → "]"  (尾逗号)
+  //   - 修 `'value'`（作为值出现的单引号字符串）→ "value"
+
+  let output = "";
+  for (let t = 0; t < tokens.length; t++) {
+    const token = tokens[t];
+    const type = token.slice(0, 4);
+    const content = token.slice(4);
+
+    if (type === "STR:") {
+      // 字符串字面量：强制用双引号
+      // 转义内容里的未转义双引号
+      const escaped = content.replace(/(?<!\\)"/g, '\\"');
+      output += '"' + escaped + '"';
+      continue;
+    }
+
+    // TOK 片段：非字符串的语法部分
+    let part = content;
+
+    // 修复常见的 "key' : value" 模式：把 "'" 紧跟 : 改成 ":"
+    // 例如 "artist' : " → "artist" :
+    part = part.replace(/"([^"]*)"\s*'\s*:/g, '"$1":');
+
+    // 修复 "key':" （key 后直接是 '然后是 :）
+    part = part.replace(/'([^']*)'\s*:/g, '"$1":');
+
+    // 修复 "key'value" 中 ' 代替 : 的情况
+    // 例: "artist' "神秘花园"" → "artist": "神秘花园""
+    // 检查下一个 token 是否为 STR，如果当前 TOK 结尾是 "'"
+    part = part.replace(/"([^"]*)"\s*'\s*/g, '"$1": ');
+
+    // 修复值位置的单引号字符串：': 'value'  或 : 'value'  → : "value"
+    // (这在上面状态机已经处理过了，因为单引号内容会被识别为 STR token)
+
+    // 移除尾逗号
+    part = part.replace(/,(\s*[}\]])/g, "$1");
+
+    output += part;
+  }
+
+  return output;
+}
+
+// ── JSON 提取（多层回退 + 修复）──
+
+function extractJson(text: string): Record<string, any> | null {
+  // 候选 JSON 文本列表：按可能性从高到低尝试
+  const candidates: string[] = [];
+
+  // 候选 1：直接全文
+  candidates.push(text);
+
+  // 候选 2：```json ... ``` 代码块
+  const codeMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeMatch?.[1]) candidates.push(codeMatch[1].trim());
+
+  // 候选 3：第一个 { ... } 区间
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start >= 0 && end > start) {
+    candidates.push(text.slice(start, end + 1));
+  }
+
+  // 对每个候选，先尝试直接解析，再尝试修复后解析
+  for (const raw of candidates) {
+    // 尝试 1：直接解析
     try {
-      return JSON.parse(text.slice(start, end + 1));
+      return JSON.parse(raw);
+    } catch {}
+
+    // 尝试 2：修复后解析
+    try {
+      const fixed = fixJson(raw);
+      const result = JSON.parse(fixed);
+      if (result && typeof result === "object") {
+        console.log("[llm] JSON 修复成功：原始有语法错误，已修复");
+        return result;
+      }
     } catch {}
   }
 

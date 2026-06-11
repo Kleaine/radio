@@ -245,6 +245,7 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
           album: s.album,
           coverUrl: s.coverUrl,
           durationMs: s.durationMs,
+          audioUrl: `/api/audio?mid=${encodeURIComponent(s.id!)}`,
         })),
       }));
     } catch (err: any) {
@@ -295,7 +296,7 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
 
     // 增强 items：TTS 合成立即推送，歌慢慢搜
     const voiceStyle = req.body.voice || "gentle_female";
-    const enrichedItems = await enrichItems(plan.items, {
+    let enrichedItems = await enrichItems(plan.items, {
       musicService: getMusicService(),
       ttsService: {
         synthesize: async (text: string, voice?: string) => {
@@ -305,6 +306,26 @@ dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
         },
       },
     });
+
+    // 硬过滤：去掉最近播放过的歌（LLM 可能不遵守 prompt 指令）
+    if (userId) {
+      const db = getDb();
+      const recentTitles = db.prepare(`
+        SELECT DISTINCT LOWER(song_title) FROM plays
+        WHERE user_id = ? ORDER BY played_at DESC LIMIT 30
+      `).all(userId).map((r: any) => r['LOWER(song_title)']);
+      enrichedItems = enrichedItems.filter(item => {
+        if (item.type !== 'song') return true;
+        const title = (item.title || '').toLowerCase();
+        // 用户指名要的歌不拦
+        if (message.toLowerCase().includes(title)) return true;
+        if (recentTitles.includes(title)) {
+          console.log(`[dispatch] 硬过滤: ${item.title} (最近听过)`);
+          return false;
+        }
+        return true;
+      });
+    }
 
     // 后台预缓存所有歌曲的播放链接，点播时秒出
     const songMids = enrichedItems

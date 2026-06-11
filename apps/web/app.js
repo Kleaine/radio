@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 初始化默认声线为 温柔女声
     let currentVoice = 'gentle_female';
     let localToken = localStorage.getItem('dj_auth_token') || '';
-    let mediaRecorder, audioChunks = [], isRecording = false;
+
 
     // 播放队列管理
     let playQueue = [];
@@ -231,97 +231,305 @@ document.addEventListener('DOMContentLoaded', () => {
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     };
 
-    // ================= 8. 语音录制 + /api/chat（保留原有逻辑） =================
-    const sendAudioToServer = async (blob) => {
-        const formData = new FormData();
-        formData.append('audio', blob, 'user_voice.webm');
-        formData.append('voice_style', currentVoice);
-
-        try {
-            const response = await fetch('/api/chat', { 
-                method: 'POST', 
-                body: formData,
-                headers: { 'Authorization': `Bearer ${localToken}` }
-            });
-            const result = await response.json();
-            if (result.code === 200) {
-                const { userText, replyText, audioUrl, recommendSong } = result.data;
-                
-                appendUserMessage(userText);
-                
-                const sDiv = document.createElement('div'); 
-                sDiv.className = 'message system-message';
-                let html = `<div class="message-content">${escapeHtml(replyText)}</div>`;
-                if (recommendSong) {
-                    html += renderSongCard(recommendSong);
-                }
-                sDiv.innerHTML = html;
-                chatBox.appendChild(sDiv);
-                scrollToBottom();
-                
-                if (audioUrl) {
-                    audioPlayer.src = audioUrl;
-                    audioPlayer.play()
-                        .then(() => {
-                            djInfoTitle.textContent = '为您播报中';
-                            djInfoDesc.textContent = replyText;
-                            recordStatus.textContent = 'DJ 正在播报歌曲介绍...';
-                        })
-                        .catch(() => resetUI());
-                    
-                    audioPlayer.onended = () => {
-                        if (recommendSong && recommendSong.songUrl) {
-                            audioPlayer.src = recommendSong.songUrl;
-                            audioPlayer.play()
-                                .then(() => {
-                                    djInfoTitle.textContent = '正在播放歌曲';
-                                    djInfoDesc.textContent = `🎵 《${recommendSong.title}》 - ${recommendSong.artist}`;
-                                    recordStatus.textContent = '音乐播放中，享受这一刻...';
-                                })
-                                .catch(() => resetUI());
-                            audioPlayer.onended = () => resetUI();
-                        } else {
-                            resetUI();
-                        }
-                    };
-                } else if (recommendSong && recommendSong.songUrl) {
-                    audioPlayer.src = recommendSong.songUrl;
-                    audioPlayer.play()
-                        .then(() => {
-                            djInfoTitle.textContent = '正在播放歌曲';
-                            djInfoDesc.textContent = `🎵 《${recommendSong.title}》 - ${recommendSong.artist}`;
-                            recordStatus.textContent = '音乐播放中...';
-                        })
-                        .catch(() => resetUI());
-                    audioPlayer.onended = () => resetUI();
-                } else {
-                    resetUI();
-                }
-            } else { alert(result.message); resetUI(); }
-        } catch (e) { alert('语音计算中枢网关连接崩溃。'); resetUI(); }
+    // ================= 8. 语音录制（直接用 diagnostic_plus.html 的实现，16kHz WAV，零依赖） =================
+    let _recState = {
+        audioContext: null,
+        mediaStream: null,
+        audioProcessor: null,
+        isRecording: false,
+        isStarting: false,
+        audioBuffer: [],
+        sampleRate: 16000,
+        startTs: 0,
     };
 
-    recordBtn.addEventListener('click', async () => {
-        if (!isRecording) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
-                audioChunks = [];
-                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                mediaRecorder.onstop = () => { 
-                    sendAudioToServer(new Blob(audioChunks, { type: 'audio/webm' })); 
-                    stream.getTracks().forEach(t => t.stop()); 
-                };
-                mediaRecorder.start();
-                isRecording = true; 
-                recordBtn.classList.add('recording'); 
-                visualizer.classList.add('active'); 
-                recordStatus.textContent = '系统正在倾听您的心声...';
-            } catch (err) { alert('未能成功拉起麦克风采集硬件。'); }
+    const _recSetUI = (recording) => {
+        if (recording) {
+            recordBtn.classList.add('recording');
+            visualizer.classList.add('active');
+            recordStatus.textContent = '正在录音，点击停止';
         } else {
-            mediaRecorder.stop(); 
-            isRecording = false; 
-            recordStatus.textContent = '私有化计算集群动态推演中...';
+            recordBtn.classList.remove('recording');
+            visualizer.classList.remove('active');
+            recordStatus.textContent = '按住或点击开始说话';
+        }
+    };
+
+    const _recCleanup = () => {
+        try { if (_recState.mediaStream) _recState.mediaStream.getTracks().forEach(t => t.stop()); } catch(e){}
+        try { if (_recState.audioProcessor) _recState.audioProcessor.disconnect(); } catch(e){}
+        try { if (_recState.audioContext && _recState.audioContext.state !== 'closed') _recState.audioContext.close(); } catch(e){}
+        _recState = {
+            audioContext: null,
+            mediaStream: null,
+            audioProcessor: null,
+            isRecording: false,
+            isStarting: false,
+            audioBuffer: [],
+            sampleRate: 16000,
+            startTs: 0,
+        };
+    };
+
+    // Float32 PCM 样本 → WAV Blob 编码器 (强制16kHz, mono, 16-bit PCM)
+    // 如果浏览器 AudioContext 采样率不是 16000Hz，先线性重采样，保证 ASR 服务收到正确的音频时长
+    const _resampleLinear = (samples, fromSR, toSR = 16000) => {
+        if (fromSR === toSR) return samples;
+        const ratio = fromSR / toSR;
+        const newLen = Math.floor(samples.length / ratio);
+        const result = new Float32Array(newLen);
+        for (let i = 0; i < newLen; i++) {
+            const srcIdx = i * ratio;
+            const i0 = Math.floor(srcIdx);
+            const frac = srcIdx - i0;
+            const s0 = samples[Math.min(i0, samples.length - 1)];
+            const s1 = samples[Math.min(i0 + 1, samples.length - 1)];
+            result[i] = s0 * (1 - frac) + s1 * frac;
+        }
+        return result;
+    };
+
+    // —— diagnostic_plus.html 同款 WAV 编码器 (44B RIFF header + 16-bit PCM) ——
+    const _wavEncodeFromFloat32 = (samples, sampleRate) => {
+        const wavBuffer = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(wavBuffer);
+
+        const writeStr = (offset, str) => {
+            for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+            }
+        };
+
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * 2, true);
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeStr(36, 'data');
+        view.setUint32(40, samples.length * 2, true);
+
+        let offsetWav = 44;
+        for (let i = 0; i < samples.length; i++) {
+            const s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(offsetWav, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            offsetWav += 2;
+        }
+
+        return new Blob([view], { type: 'audio/wav' });
+    };
+
+    const _recSendASR = (blob) => {
+        if (!blob || blob.size === 0) {
+            recordStatus.textContent = '没有录到声音，请重试';
+            setTimeout(() => _recSetUI(false), 500);
+            return;
+        }
+
+        // —— 诊断模式：同一段音频同时发两条路径，对比结果 ——
+        console.log('[录音] 生成 WAV:', blob.size, 'bytes, sampleRate: 16000');
+        console.log('[录音] 同时发往 :5000 (直连ASR) 和 /api/asr (经过Node后端) 对比结果');
+
+        recordStatus.textContent = '语音识别中...';
+
+        const formDataDirect = new FormData();
+        formDataDirect.append('file', blob, 'user_voice_direct.wav');
+
+        const formDataBackend = new FormData();
+        formDataBackend.append('audio', blob, 'user_voice.wav');
+
+        // 路径1：直连 ASR 服务 (和 diagnostic_plus.html 完全一致)
+        // —— 关键修复：优先用 data.results.google.text（经过独立标点恢复）
+        //    而不是 data.text / whisper.text（Whisper 自带标点，会出问题）
+        const p1 = fetch('http://localhost:5000/recognize/file', {
+            method: 'POST',
+            body: formDataDirect,
+        }).then(r => r.json()).then(data => {
+            console.log('[ASR-DIRECT :5000] 原始响应:', data);
+            // 提取策略与 diagnostic_plus.html 保持一致
+            let txt = '';
+            if (data && data.results && data.results.google && data.results.google.status === 'success' && data.results.google.text) {
+                txt = data.results.google.text;  // 优先：Google 识别 + 标点后处理
+            } else if (data && data.text) {
+                txt = data.text;  // 回退：顶层 text 字段
+            } else if (data && data.results && data.results.whisper && data.results.whisper.text) {
+                txt = data.results.whisper.text;  // 回退：Whisper 直接输出
+            }
+            return txt;
+        }).catch(e => {
+            console.error('[ASR-DIRECT :5000] 失败:', e);
+            return '';
+        });
+
+        // 路径2：经过 Node 后端 /api/asr
+        // 后端已经统一提取策略，这里只需要读 data.data.text
+        const p2 = fetch('/api/asr', {
+            method: 'POST',
+            body: formDataBackend,
+            headers: { 'Authorization': `Bearer ${localToken}` }
+        }).then(r => r.json()).then(data => {
+            console.log('[ASR-VIA-NODE /api/asr] 原始响应:', data);
+            if (data.code === 200 && data.data && data.data.text) return data.data.text;
+            return '';
+        }).catch(e => {
+            console.error('[ASR-VIA-NODE /api/asr] 失败:', e);
+            return '';
+        });
+
+        Promise.all([p1, p2]).then(([directText, backendText]) => {
+            console.log('%c=== ASR 两条路径结果对比 ===', 'color: #ff9800; font-weight: bold');
+            console.log('%c直连 :5000        →', 'color: #2e7d32', directText || '(空)');
+            console.log('%c经 Node /api/asr   →', 'color: #1565c0', backendText || '(空)');
+            if (directText && backendText && directText !== backendText) {
+                console.log('%c⚠ 两条路径结果不一致！问题在 Node 后端转发', 'color: #d32f2f; font-weight: bold');
+            } else if (directText) {
+                console.log('%c✓ 直连ASR正常，识别有效', 'color: #2e7d32; font-weight: bold');
+            }
+
+            // 优先用直连结果（保证识别质量），后端路径也正常时用后端
+            const useText = directText || backendText;
+            if (useText) {
+                textInput.value = useText;
+                textInput.focus();
+                recordStatus.textContent = '识别完成，请点击发送';
+            } else {
+                recordStatus.textContent = '未能识别出语音内容，请试着重新说一次';
+            }
+        });
+    };
+
+    // —— diagnostic_plus.html 同款 startRecording ——
+    const _recStart = () => {
+        // 防止 getUserMedia 异步期间用户反复点击导致并发启动
+        if (_recState.isRecording || _recState.isStarting) {
+            console.log('[录音] 已在录音或正在启动，忽略重复点击');
+            return;
+        }
+        _recState.isStarting = true;
+        console.log('[录音] 开始启动录音，等待麦克风权限...');
+
+        navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                channelCount: 1,
+                sampleRate: 16000,
+            }
+        }).then((stream) => {
+            _recState.mediaStream = stream;
+
+            const AC = window.AudioContext || window.webkitAudioContext;
+            const audioContext = new AC({ sampleRate: 16000 });
+            _recState.audioContext = audioContext;
+
+            const actualSR = audioContext.sampleRate;
+            console.log('[录音] AudioContext 实际采样率:', actualSR,
+                       actualSR === 16000 ? '(OK, 符合要求)' : '(浏览器未按16kHz运行，将自动重采样到16kHz)');
+
+            const source = audioContext.createMediaStreamSource(stream);
+
+            _recState.audioBuffer = [];
+            const bufferSize = 4096;
+            const processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
+            _recState.audioProcessor = processor;
+
+            // —— 与 diagnostic_plus.html 一致：无条件采集所有 onaudioprocess 回调 ——
+            processor.onaudioprocess = function(e) {
+                const data = e.inputBuffer.getChannelData(0);
+                const copy = new Float32Array(data);
+                _recState.audioBuffer.push(copy);
+            };
+
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+
+            _recState.isStarting = false;
+            _recState.isRecording = true;
+            _recState.startTs = Date.now();
+            _recSetUI(true);
+            console.log('[录音] 开始录音 (16kHz WAV)');
+        }).catch((err) => {
+            console.error('[录音] 启动失败:', err);
+            _recState.isStarting = false;
+            alert('无法使用麦克风：' + (err.message || err));
+            _recCleanup();
+            _recSetUI(false);
+        });
+    };
+
+    // —— diagnostic_plus.html 同款 stopRecording ——
+    // 关键点：先设 isRecording=false + 先清资源，再做重采样和编码，
+    //         保证点击停止按钮后，麦克风立即停止，用户不会觉得"没反应"
+    const _recStop = () => {
+        if (!_recState.isRecording) return;
+
+        console.log('[录音] 用户点击停止，采集到的音频块:', _recState.audioBuffer.length);
+
+        // 1. 立即停止录音状态，防止 onaudioprocess 继续 push（虽然我们没加状态判断）
+        _recState.isRecording = false;
+
+        // 2. 先记录需要的数据（在清资源之前）
+        const actualSR = _recState.audioContext ? _recState.audioContext.sampleRate : 16000;
+        const audioBufferSnapshot = _recState.audioBuffer.slice();  // 复制引用，避免后续被清理影响
+        const totalLength = audioBufferSnapshot.reduce((sum, b) => sum + b.length, 0);
+
+        console.log('[录音] 浏览器采样率:', actualSR, ', 总样本数:', totalLength,
+                    ', 实际时长约', (totalLength / actualSR).toFixed(2), '秒');
+
+        // 3. 立即清理资源 —— 麦克风停止，用户感知到"已经停止"
+        _recCleanup();
+        _recSetUI(false);
+
+        // 4. 录音太短：提前返回
+        if (totalLength < (actualSR * 0.3)) {
+            recordStatus.textContent = '录音太短，请说长一点';
+            setTimeout(() => _recSetUI(false), 500);
+            return;
+        }
+
+        // 5. 异步做重采样和 WAV 编码（放到下一个事件循环，避免阻塞 UI）
+        setTimeout(() => {
+            try {
+                // 合并所有 Float32Array
+                let merged = new Float32Array(totalLength);
+                let offset = 0;
+                for (const chunk of audioBufferSnapshot) {
+                    merged.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                // —— 如果浏览器 SR 不是 16kHz，线性重采样到 16kHz ——
+                if (actualSR !== 16000) {
+                    console.log('[录音] 浏览器采样率', actualSR + 'Hz，重采样到 16000Hz');
+                    merged = _resampleLinear(merged, actualSR, 16000);
+                }
+
+                // WAV 编码：sampleRate 固定 16000
+                const wavBlob = _wavEncodeFromFloat32(merged, 16000);
+                console.log('[录音] 生成 WAV:', wavBlob.size, 'bytes, 最终 sampleRate: 16000, 约',
+                           (merged.length / 16000).toFixed(2), '秒');
+
+                _recSendASR(wavBlob);
+            } catch (e) {
+                console.error('[录音] 音频处理失败:', e);
+                recordStatus.textContent = '音频处理失败，请重试';
+            }
+        }, 0);
+    };
+
+    recordBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_recState.isRecording) {
+            _recStop();
+        } else {
+            _recStart();
         }
     });
 
@@ -362,7 +570,9 @@ document.addEventListener('DOMContentLoaded', () => {
         textInput.disabled = true;
         recordStatus.textContent = 'AI 思考中...';
 
-        if (!silent) appendUserMessage(text);
+        if (!silent) {
+            appendUserMessage(text);
+        }
         _lastUserMessage = silent ? _lastUserMessage : text;
 
         // 静默请求不创建聊天气泡
@@ -508,11 +718,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (type === 'plan') {
-            // 静默请求：sDiv 没挂到 DOM，先挂上
-            if (sDiv && !sDiv.parentNode) {
+            const items = payload.items || [];
+            // 静默请求：复用 sDiv 样式但不创建空气泡
+            if (!sDiv.parentNode) {
+                sDiv.style.padding = '0';
+                sDiv.style.background = 'none';
+                sDiv.style.border = 'none';
                 chatBox.appendChild(sDiv);
             }
-            const items = payload.items || [];
             playPlanItems(items, sDiv);
             return;
         }
@@ -527,55 +740,84 @@ document.addEventListener('DOMContentLoaded', () => {
         const isRecommend = /推荐/.test(_lastUserMessage);
 
         if (isRecommend) {
-            // 推荐模式：全部渲染，不自动播
+            // ── 推荐模式：一次性渲染全部卡片 ──
             let pendingTtsText = '';
-            for (const item of items) {
-                if (item.type === 'tts') { pendingTtsText = item.text || ''; }
-                else if (item.type === 'song') {
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.type === 'tts') {
+                    pendingTtsText = item.text || '';
+                } else if (item.type === 'song') {
                     if (pendingTtsText) {
-                        const d = document.createElement('div'); d.className = 'tts-card'; d.textContent = pendingTtsText; container.appendChild(d); pendingTtsText = '';
+                        const ttsDiv = document.createElement('div');
+                        ttsDiv.className = 'tts-card';
+                        ttsDiv.textContent = pendingTtsText;
+                        container.appendChild(ttsDiv);
+                        pendingTtsText = '';
                     }
-                    const d = document.createElement('div'); d.innerHTML = renderSongCard(item); container.appendChild(d);
+                    const d = document.createElement('div');
+                    d.innerHTML = renderSongCard(item);
+                    container.appendChild(d);
                 }
             }
             scrollToBottom();
         } else {
-            // 电台模式：逐首渲染+播放
-            for (const item of items) {
+            // ── 电台模式：逐首渲染+播放 ──
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
                 if (item.type === 'tts') {
-                    const d = document.createElement('div'); d.className = 'tts-card'; d.textContent = item.text || ''; container.appendChild(d); scrollToBottom();
-                    if (item.ttsAudioUrl) await playAudio(item.ttsAudioUrl, item.text || '');
+                    const ttsDiv = document.createElement('div');
+                    ttsDiv.className = 'tts-card';
+                    ttsDiv.textContent = item.text || '';
+                    container.appendChild(ttsDiv);
+                    scrollToBottom();
+                    if (item.ttsAudioUrl) {
+                        await playAudio(item.ttsAudioUrl, item.text || 'DJ 播报');
+                    }
                 } else if (item.type === 'song') {
-                    const d = document.createElement('div'); d.innerHTML = renderSongCard(item); container.appendChild(d); scrollToBottom();
+                    const d = document.createElement('div');
+                    d.innerHTML = renderSongCard(item);
+                    container.appendChild(d);
+                    scrollToBottom();
                     if (item.audioUrl) {
+                        addToPlayQueue('song', item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`,
+                            (i > 0 && items[i-1].type === 'tts' && items[i-1].ttsAudioUrl) ? items[i-1].ttsAudioUrl : '',
+                            (i > 0 && items[i-1].type === 'tts') ? (items[i-1].text || '') : '');
+                        currentQueueIndex = playQueue.length - 1;
                         resetAllCardButtons();
                         currentPlayingCard = d.querySelector('.song-card');
-                        if (currentPlayingCard) { const b = currentPlayingCard.querySelector('.song-play-btn'); if (b) b.textContent = '⏸'; }
-                        fetch('/api/player/report-play', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId }) }).catch(() => {});
+                        if (currentPlayingCard) {
+                            const btn = currentPlayingCard.querySelector('.song-play-btn');
+                            if (btn) btn.textContent = '⏸';
+                        }
+                        fetch('/api/player/report-play', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: item.title, artist: item.artist, songId: item.songId })
+                        }).catch(() => {});
                         await playAudio(item.audioUrl, `🎵 《${item.title}》 - ${item.artist}`);
                     }
                 }
             }
+        }
+
+        // 播完预取下一批
+        if (playQueue.length - currentQueueIndex <= 2) {
+            sendTextDispatch('继续', true);
         }
         resetUI();
     };
 
     const playAudio = (url, desc) => {
         return new Promise((resolve) => {
-            if (audioPlayer.src !== url) {
-                audioPlayer.src = url;
-            }
-            audioPlayer.play()
-                .then(() => {
-                    djInfoTitle.textContent = '正在播放';
-                    djInfoDesc.textContent = desc;
-                    recordStatus.textContent = '播放中...';
-                    if (currentPlayingCard) {
-                        const btn = currentPlayingCard.querySelector('.song-play-btn');
-                        if (btn) btn.textContent = '⏸';
-                    }
-                })
-                .catch(() => {});
+            if (audioPlayer.src !== url) audioPlayer.src = url;
+            audioPlayer.play().then(() => {
+                djInfoTitle.textContent = '正在播放';
+                djInfoDesc.textContent = desc;
+                recordStatus.textContent = '播放中...';
+                if (currentPlayingCard) {
+                    const btn = currentPlayingCard.querySelector('.song-play-btn');
+                    if (btn) btn.textContent = '⏸';
+                }
+            }).catch(() => {});
             audioPlayer.onended = resolve;
             audioPlayer.onerror = resolve;
         });
@@ -631,68 +873,27 @@ document.addEventListener('DOMContentLoaded', () => {
         playQueue.push({ type, url, desc, ttsUrl, ttsText });
     };
 
-    // 播放指定队列索引（自动处理串词→歌曲）
+    // 播放队列指定位置（只负责切歌+按钮，不负责渲染）
     const playQueueItem = async (index) => {
         if (index < 0 || index >= playQueue.length) return;
-
-        // 重置旧卡片 UI
-        if (currentPlayingCard) {
-            const oldBtn = currentPlayingCard.querySelector('.song-play-btn');
-            if (oldBtn) oldBtn.textContent = '▶';
-            const oldFill = currentPlayingCard.querySelector('.song-progress-fill');
-            if (oldFill) oldFill.style.width = '0%';
-        }
-
+        resetAllCardButtons();
         currentQueueIndex = index;
         const item = playQueue[index];
 
-        // 找到或创建卡片
-        let card = document.querySelector(`.song-card[data-audio-url="${item.url.replace(/"/g, '\\"')}"]`);
-        if (!card && item.desc) {
-            const nameMatch = item.desc.match(/《(.+?)》.*-(.+)/);
-            const d = document.createElement('div');
-            d.innerHTML = renderSongCard({ title: nameMatch?.[1] || '', artist: (nameMatch?.[2] || '').trim(), audioUrl: item.url });
-            const chatBox = document.getElementById('chat-box');
-            if (chatBox) { chatBox.appendChild(d.firstElementChild); scrollToBottom(); }
-            card = document.querySelector(`.song-card[data-audio-url="${item.url.replace(/"/g, '\\"')}"]`);
-        }
-        if (card) {
-            currentPlayingCard = card;
-            const btn = card.querySelector('.song-play-btn');
-            if (btn) btn.textContent = '⏸';
-        }
-
-        // 先出串词文字卡片 + 播 TTS
-        if (item.ttsText) {
-            const ttsDiv = document.createElement('div');
-            ttsDiv.className = 'tts-card';
-            ttsDiv.textContent = item.ttsText;
-            const chatBox = document.getElementById('chat-box');
-            if (chatBox) { chatBox.appendChild(ttsDiv); scrollToBottom(); }
-        }
         if (item.ttsUrl) {
             await new Promise((resolve) => {
                 audioPlayer.src = item.ttsUrl;
-                audioPlayer.play().then(() => {
-                    djInfoTitle.textContent = 'DJ 串词';
-                    djInfoDesc.textContent = item.ttsText || '';
-                }).catch(() => {});
+                audioPlayer.play().catch(() => {});
                 audioPlayer.onended = resolve;
                 audioPlayer.onerror = resolve;
             });
         }
-        // 再播歌曲
         audioPlayer.src = item.url;
         audioPlayer.play().then(() => {
             djInfoTitle.textContent = '正在播放';
             djInfoDesc.textContent = item.desc;
             recordStatus.textContent = '播放中...';
         }).catch(() => {});
-        audioPlayer.onended = () => {
-            if (currentQueueIndex < playQueue.length - 1) {
-                playQueueItem(currentQueueIndex + 1);
-            }
-        };
     };
 
     // 全局重置：所有卡片按钮变 ▶
@@ -707,7 +908,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             audioPlayer.pause();
             resetAllCardButtons();
-            _fetchingNext = true;
             recordStatus.textContent = '正在为您准备...';
             sendTextDispatch('继续', true);
         }

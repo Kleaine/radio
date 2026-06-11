@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "username": "pandas",
+      "password_hash": "$2a$10$U1Dol9KRGnqH4/prd67ZleuvV0HA.R3MezN3yr4XHl4y2CcqsiLay",
+      "id": 1
+    },
+    {
+      "username": "testuser",
+      "password_hash": "$2a$10$uLxAZHORnQsLtVT.SNIn..sKms/1XBb/19SXBjhSMOskk/LY2rypK",
+      "id": 2
+    }
+  ],
+  "plays": [],
+  "feishu_bindings": []
+}

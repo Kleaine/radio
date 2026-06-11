@@ -1,17 +1,20 @@
 // music.service.ts — QQ音乐服务（Mock + Python 桥接 双实现）
+// 增加了重试逻辑，解决 qimei 设备指纹请求偶尔 ConnectionResetError 的问题
 
 import { execFile } from "child_process";
 import path from "path";
 import type { MusicService, Song, SongUrlResult, LyricResult } from "../interface/music.service.interface";
 
 const BRIDGE = path.resolve(__dirname, "..", "..", "..", "..", "data", "qq_bridge.py");
-// 按优先级尝试找 Python（先读环境变量，再试常见路径，最后 fallback 到 python 命令）
 const PYTHON_PATHS = [
   process.env.PYTHON_PATH,
   "C:\\Users\\Administrator\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
-  "python3",
   "python",
+  "python3",
 ].filter(Boolean) as string[];
+
+const MAX_BRIDGE_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 let _pythonPath: string | null = null;
 async function findPython(): Promise<string> {
@@ -25,18 +28,54 @@ async function findPython(): Promise<string> {
       return p;
     } catch {}
   }
-  return "python"; // fallback
+  return "python";
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function callBridge(subcmd: string, arg: string, limit?: number): Promise<any> {
   const python = await findPython();
-  return new Promise((resolve) => {
-    const args = limit ? [BRIDGE, subcmd, arg, String(limit)] : [BRIDGE, subcmd, arg];
-    execFile(python, args, { maxBuffer: 2 * 1024 * 1024, timeout: 60000, env: { ...process.env, PYTHONIOENCODING: "utf-8" } }, (err, stdout) => {
-      if (err) { console.error("[bridge] execFile error:", err.message); resolve(null); return; }
-      try { resolve(JSON.parse(stdout)); } catch (e) { console.error("[bridge] JSON parse error:", String(e)); resolve(null); }
-    });
-  });
+  const args = limit ? [BRIDGE, subcmd, arg, String(limit)] : [BRIDGE, subcmd, arg];
+
+  for (let attempt = 1; attempt <= MAX_BRIDGE_RETRIES; attempt++) {
+    try {
+      const result = await new Promise<any>((resolve, reject) => {
+        execFile(python, args, {
+          maxBuffer: 2 * 1024 * 1024,
+          timeout: 60000,
+          env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+        }, (err, stdout) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          try {
+            const parsed = JSON.parse(stdout);
+            resolve(parsed);
+          } catch (e) {
+            reject(new Error(`JSON parse failed: ${String(e).slice(0, 200)}`));
+          }
+        });
+      });
+      return result;
+    } catch (err: any) {
+      const msg = String(err?.message || err || "").toLowerCase();
+      const isRetryable = msg.includes("connection") || msg.includes("reset") ||
+        msg.includes("timeout") || msg.includes("timed out") || msg.includes("econn") ||
+        msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") ||
+        msg.includes("json parse") || msg.includes("exit code");
+      if (isRetryable && attempt < MAX_BRIDGE_RETRIES) {
+        console.warn(`[bridge] 第 ${attempt} 次调用失败: ${msg.slice(0, 120)}，${RETRY_DELAY_MS}ms 后重试`);
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      console.error(`[bridge] 调用失败 (${subcmd}): ${msg.slice(0, 200)}`);
+      return null;
+    }
+  }
+  return null;
 }
 
 // ── Mock 实现 ──
@@ -69,6 +108,10 @@ export class MockMusicService implements MusicService {
 export class QQMusicService implements MusicService {
   private urlCache: Map<string, string> = new Map();
 
+  constructor(_cookie?: string) {
+    // 参数保留用于向后兼容（旧的 cookie 方式不再使用，改为 Python 桥接 + credential 文件）
+  }
+
   async search(keyword: string, limit = 10): Promise<Song[]> {
     const data = await callBridge("search", keyword, limit);
     if (!data || !Array.isArray(data)) return [];
@@ -86,11 +129,9 @@ export class QQMusicService implements MusicService {
   }
 
   async getSongUrl(songId: string): Promise<SongUrlResult> {
-    // 先从缓存取（search 时已拿到 URL）
     if (this.urlCache.has(songId)) {
       return { url: this.urlCache.get(songId)!, br: 320 };
     }
-    // 缓存没有再去 bridge 查
     const map = await callBridge("url", songId);
     if (map && map[songId]) {
       return { url: map[songId], br: 320 };
