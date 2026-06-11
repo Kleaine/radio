@@ -3,6 +3,7 @@
 
 import { Router, Request, Response } from "express";
 import { getDb } from "../db/init";
+import { recordPlay } from "../services/profile.service";
 
 export const playerRoutes = Router();
 
@@ -141,6 +142,7 @@ playerRoutes.post("/report-play", (req: Request, res: Response) => {
       INSERT INTO plays (user_id, song_id, song_title, artist, skipped)
       VALUES (?, ?, ?, ?, ?)
     `).run(req.body.userId || 1, songId || "", title, artist || "", skipped ? 1 : 0);
+    if (artist) recordPlay(artist);
     res.success(null, "已记录");
   } catch (err: any) {
     res.fail(500, err.message);

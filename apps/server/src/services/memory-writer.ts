@@ -48,8 +48,13 @@ export function createMemoryWriter(userDir?: string): MemoryWriter {
 
     ensureDir();
     const filePath = path.join(dir, filename);
-    const line = `- ${entry.add.trim()}\n`;
-    fs.appendFileSync(filePath, line, "utf-8");
+    const line = `- ${entry.add.trim()}`;
+    // 去重：已存在的不重复追加
+    try {
+      const existing = fs.readFileSync(filePath, "utf-8");
+      if (existing.includes(line)) return;
+    } catch {}
+    fs.appendFileSync(filePath, line + "\n", "utf-8");
   }
 
   function writeAll(entries: MemoryEntry[]) {

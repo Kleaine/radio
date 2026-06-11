@@ -183,7 +183,7 @@ function buildContextForUser(userId: number | undefined) {
 
 // ── POST /api/dispatch ──
 // SSE 流式响应
-dispatchRoutes.post("/dispatch", async (req: Request, res: Response) => {
+dispatchRoutes.post("/dispatch", authMiddleware, async (req: Request, res: Response) => {
   const { message } = req.body;
 
   if (!message || typeof message !== "string") {
