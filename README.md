@@ -209,6 +209,23 @@ radio/
 
 ## 更新日志
 
+### 2026-06-11 — @pandas520（前端优化）
+
+- `app.js` — 静默请求不创建空白气泡，预取只播不渲染
+
+### 2026-06-11 — @Kleaine（去重+优化）
+
+**去重**
+- `dispatch.routes.ts` — 标准化硬过滤：去括号内容、去标点空格后比对历史记录
+- 批次内去重：同一批 LLM 推的歌标准化后重复的直接跳过
+
+**Python 路径修正**
+- `music.service.ts` / `audio.routes.ts` — 移除硬编码用户路径，改用 `python`/`python3`
+
+**上下文**
+- `context.service.ts` — 口味画像 + 推荐策略注入
+- `plan-system.md` — 串词 60-100 字
+
 ### 2026-06-11 — @Kleaine（ASR 集成与修复）
 
 **ASR 服务接入**
