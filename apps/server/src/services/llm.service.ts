@@ -225,7 +225,7 @@ function extractJson(text: string): Record<string, any> | null {
       const fixed = fixJson(raw);
       const result = JSON.parse(fixed);
       if (result && typeof result === "object") {
-        console.log(`[llm] JSON 修复成功，原始片段: ${raw.slice(0, 100)}...`);
+        console.log("[llm] JSON 修复成功：原始有语法错误，已修复");
         return result;
       }
     } catch {}
