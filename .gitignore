@@ -14,4 +14,6 @@ data/qq_qrcode.png
 data/qq_credential.json
 apps/tts/outputs/
 CLAUDE.md
+__pycache__/
+*.pyc
 
