@@ -823,10 +823,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 播完预取下一批
-        if (playQueue.length - currentQueueIndex <= 2) {
-            sendTextDispatch('继续', true);
-        }
         resetUI();
     };
 
